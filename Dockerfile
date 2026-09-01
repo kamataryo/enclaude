@@ -4,13 +4,13 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-# claude-code のバージョンは pnpm-lock.yaml で固定する（dclaude self-update で更新）。
+# claude-code のバージョンは pnpm-lock.yaml で固定する（enclaudé self-update で更新）。
 # ロックは全プラットフォームの optional 依存を持つので、Mac で生成したものをそのまま使える
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc /opt/dclaude/
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc /opt/enclaude/
 RUN corepack enable \
- && cd /opt/dclaude \
+ && cd /opt/enclaude \
  && pnpm install --frozen-lockfile \
- && ln -s /opt/dclaude/node_modules/.bin/claude /usr/local/bin/claude
+ && ln -s /opt/enclaude/node_modules/.bin/claude /usr/local/bin/claude
 
 RUN mkdir -p /home/node/.claude && chown -R node:node /home/node
 

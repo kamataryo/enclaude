@@ -13,7 +13,7 @@ compose() { docker-compose -f "$repo/compose.yml" "$@"; }
 run() {
   local ws="$1"; shift
   # claude 自身の終了メッセージは `claude --resume <id>` と出る（ネイティブバイナリなので直せない）。
-  # session-id をこちらで決めておき、終了後に dclaude 版の案内を上書きで出す
+  # session-id をこちらで決めておき、終了後に enclaudé 版の案内を上書きで出す
   local sid=""
   case " $* " in
     *" --resume "*|*" --continue "*|*" -c "*|*" --version "*|*" --help "*|*" -h "*) ;;
@@ -22,7 +22,7 @@ run() {
   local st=0
   WORKSPACE="$ws" compose run --rm claude ${sid:+--session-id "$sid"} "$@" || st=$?
   if [ -n "$sid" ]; then
-    echo "Resume this session with: dclaude --resume $sid"
+    echo "Resume this session with: enclaudé --resume $sid"
   fi
   return "$st"
 }
@@ -37,10 +37,10 @@ cmd_self_update() {
 }
 
 cmd_worktree() {
-  local name="${1:?usage: dclaude worktree <name>}"; shift
+  local name="${1:?usage: enclaudé worktree <name>}"; shift
   local root branch dir base_sha
   root="$(git rev-parse --show-toplevel)"
-  branch="wt/dclaude/${name}"
+  branch="wt/enclaude/${name}"
   dir="${root}/../wt_${name}_$(basename "$root")"
   base_sha="$(git rev-parse HEAD)"
 
@@ -68,29 +68,29 @@ cmd_worktree() {
 
 cmd_help() {
   cat <<'EOF'
-dclaude — claude-code を Docker のサンドボックスで動かすラッパー
+enclaudé — claude-code を Docker のサンドボックスで動かすラッパー
 
-  dclaude [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
-  dclaude worktree <name>  wt/dclaude/<name> の worktree を作って起動。終了時に後片付け
-  dclaude self-update      claude-code を最新にしてイメージを再ビルド
-  dclaude help             このヘルプ
-  dclaude --completion     補完スクリプトを出力（eval "$(dclaude --completion)"）
+  enclaudé [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
+  enclaudé worktree <name>  wt/enclaude/<name> の worktree を作って起動。終了時に後片付け
+  enclaudé self-update      claude-code を最新にしてイメージを再ビルド
+  enclaudé help             このヘルプ
+  enclaudé --completion     補完スクリプトを出力（eval "$(enclaudé --completion)"）
 
-claude 自身のオプションは dclaude --help（そのまま claude に渡ります）
+claude 自身のオプションは enclaudé --help（そのまま claude に渡ります）
 EOF
 }
 
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _dclaude() { _arguments '1: :(self-update worktree help --completion)' '*::arg:_files'; }
-  compdef _dclaude dclaude
+  _enclaude() { _arguments '1: :(self-update worktree help --completion)' '*::arg:_files'; }
+  compdef _enclaude enclaudé
 else
-  _dclaude() {
+  _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
     COMPREPLY=($(compgen -W "self-update worktree help --completion" -- "${COMP_WORDS[1]}"))
   }
-  complete -F _dclaude dclaude
+  complete -F _enclaude enclaudé
 fi
 EOF
 }
