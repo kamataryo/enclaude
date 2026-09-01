@@ -14,9 +14,11 @@ RUN corepack enable \
 
 RUN mkdir -p /home/node/.claude && chown -R node:node /home/node
 
+# compose が ./settings.json と ./settings.override.json を ro で渡す。claude はこれらに
+# 書き込まないので bind mount のままでよく、entrypoint がマージした結果を --settings に渡す
+COPY entrypoint.sh merge-settings.mjs /opt/enclaude/
+RUN chmod +x /opt/enclaude/entrypoint.sh
+
 USER node
 WORKDIR /workspace
-# compose が ./settings.json を ro で渡す。claude はこのファイルに書き込まないので
-# bind mount のままで問題ない（~/.claude/settings.json へコピーする必要がない）
-# コンテナ自体がサンドボックスなので、権限確認はスキップして起動する
-ENTRYPOINT ["claude", "--settings", "/mnt/settings.json", "--dangerously-skip-permissions"]
+ENTRYPOINT ["/opt/enclaude/entrypoint.sh"]

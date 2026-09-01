@@ -14,6 +14,8 @@ run() {
   local ws="$1"; shift
   # bind mount のソースが無いと Docker がディレクトリとして作ってしまうので、先に空ファイルを置く
   [ -e "$HOME/.claude/CLAUDE.md" ] || { mkdir -p "$HOME/.claude"; : > "$HOME/.claude/CLAUDE.md"; }
+  # override は任意なので、無ければ空の JSON を置いておく（マウント先がディレクトリになるのを防ぐ）
+  [ -e "$repo/settings.override.json" ] || echo '{}' > "$repo/settings.override.json"
   WORKSPACE="$ws" compose run --rm claude "$@"
 }
 

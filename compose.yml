@@ -10,8 +10,11 @@ services:
       # ホームごと永続化する。.claude だけだと毎回初回起動になる
       - home:/home/node
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      # claude --settings で読ませる。書き込まれないので ro の bind mount でよい
+      # entrypoint がこの 2 つをマージして claude --settings に渡す。
+      # 書き込まれないので ro の bind mount でよい
       - ./settings.json:/mnt/settings.json:ro
+      # ホストの ~/.claude/settings.json から必要な分だけ持ち込むための任意ファイル（git 管理外）
+      - ./settings.override.json:/mnt/settings.override.json:ro
     environment:
       # claude-code のバージョンは pnpm-lock.yaml で固定しているので、コンテナ内で
       # 勝手に自己更新されないようにする（更新はロック更新 + 再ビルドで行う）

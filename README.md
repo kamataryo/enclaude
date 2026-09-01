@@ -22,6 +22,21 @@ eval "$(enclaudé completion)"          # 補完。bash / zsh 両対応
 
 シェルを開き直してからイメージを用意する。
 
+### 設定を上書きする（任意）
+
+claude に渡す設定はリポジトリの `settings.json` に入っている。ホストの `~/.claude/settings.json` は
+コンテナからは見えないので、持ち込みたい設定がある場合は `settings.override.json`（git 管理外）に書く。
+起動時に `settings.json` へ重ねてマージされ、同じキーは override 側が勝つ。
+
+```sh
+pushd /path/to/enclaude
+cp ~/.claude/settings.json ./settings.override.json
+vi ./settings.override.json                        # 必要なパラメータだけ残す
+popd
+```
+
+ホスト固有のパス（`hooks` や `env` など）はコンテナ内では壊れた参照になるので、まるごとコピーせず必要な項目だけ残すこと。
+
 ## 使い方
 
 ```shell
