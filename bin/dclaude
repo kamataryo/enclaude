@@ -12,7 +12,19 @@ compose() { docker-compose -f "$repo/compose.yml" "$@"; }
 
 run() {
   local ws="$1"; shift
-  WORKSPACE="$ws" compose run --rm claude "$@"
+  # claude 自身の終了メッセージは `claude --resume <id>` と出る（ネイティブバイナリなので直せない）。
+  # session-id をこちらで決めておき、終了後に dclaude 版の案内を上書きで出す
+  local sid=""
+  case " $* " in
+    *" --resume "*|*" --continue "*|*" -c "*|*" --version "*|*" --help "*|*" -h "*) ;;
+    *) sid="$(uuidgen | tr 'A-Z' 'a-z')" ;;
+  esac
+  local st=0
+  WORKSPACE="$ws" compose run --rm claude ${sid:+--session-id "$sid"} "$@" || st=$?
+  if [ -n "$sid" ]; then
+    echo "Resume this session with: dclaude --resume $sid"
+  fi
+  return "$st"
 }
 
 cmd_self_update() {
@@ -54,15 +66,29 @@ cmd_worktree() {
   fi
 }
 
+cmd_help() {
+  cat <<'EOF'
+dclaude — claude-code を Docker のサンドボックスで動かすラッパー
+
+  dclaude [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
+  dclaude worktree <name>  wt/dclaude/<name> の worktree を作って起動。終了時に後片付け
+  dclaude self-update      claude-code を最新にしてイメージを再ビルド
+  dclaude help             このヘルプ
+  dclaude --completion     補完スクリプトを出力（eval "$(dclaude --completion)"）
+
+claude 自身のオプションは dclaude --help（そのまま claude に渡ります）
+EOF
+}
+
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _dclaude() { _arguments '1: :(self-update worktree --completion)' '*::arg:_files'; }
+  _dclaude() { _arguments '1: :(self-update worktree help --completion)' '*::arg:_files'; }
   compdef _dclaude dclaude
 else
   _dclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "self-update worktree --completion" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "self-update worktree help --completion" -- "${COMP_WORDS[1]}"))
   }
   complete -F _dclaude dclaude
 fi
@@ -72,6 +98,7 @@ EOF
 case "${1:-}" in
   self-update)  shift; cmd_self_update "$@" ;;
   worktree)     shift; cmd_worktree "$@" ;;
+  help)         cmd_help ;;
   --completion) cmd_completion ;;
   *)            run "$PWD" "$@" ;;
 esac

@@ -13,6 +13,17 @@ eval "$(dclaude --completion)"        # 補完（bash / zsh 両対応）
 
 初回起動時はコンテナ内で `/login` が必要（ホストの Keychain は読めないため）。認証は named volume に残るので次回以降は不要。
 
+### プラグイン
+
+プラグインは `settings.json` では管理しない。宣言しても実体が取得されず、下のコマンドが同じキーを `~/.claude/settings.json` に書くため二重になる。volume を作り直したら一度だけ実行する。
+
+```sh
+dclaude plugin marketplace add DietrichGebert/ponytail
+dclaude plugin install ponytail@ponytail
+```
+
+インストール先は `~/.claude/plugins/` で volume に残るため、次回以降は不要。ホスト側とは別管理なのでバージョンもずれる。
+
 ## コマンド
 
 | | |
@@ -20,6 +31,7 @@ eval "$(dclaude --completion)"        # 補完（bash / zsh 両対応）
 | `dclaude [args...]` | カレントディレクトリをマウントして起動。引数はそのまま claude に渡る |
 | `dclaude worktree <name>` | `wt/dclaude/<name>` の worktree を作って起動。終了時に後片付け |
 | `dclaude self-update` | `pnpm update --latest` でロックを更新し、イメージを再ビルド |
+| `dclaude help` | dclaude 自身のヘルプ。`--help` / `-h` は claude のヘルプ（そのまま渡る） |
 | `dclaude --completion` | 補完スクリプトを出力 |
 
 隔離されているので `dclaude --dangerously-skip-permissions` が実用的に使える。
@@ -45,7 +57,7 @@ worktree は `<リポジトリの親>/wt_<name>_<リポジトリ名>` に作ら�
 | ロックの移植性 | ロックは全プラットフォームの optional 依存を持つ。Mac で生成しても Linux ビルド時に `linux-*` が選ばれるのでクロスインストールは不要 |
 | 実行ユーザー | `node`（root だと `--dangerously-skip-permissions` が使えない） |
 | 永続化 | named volume `home` に `/home/node` ごと。コンテナ自体は毎回使い捨て |
-| 設定 | ホストの `~/.claude/CLAUDE.md` を read-only。`settings.json` は起動のたびに entrypoint がマージ |
+| 設定 | ホストの `~/.claude/CLAUDE.md` を read-only。`settings.json` は `claude --settings` で読ませる |
 | 隔離範囲 | マウントしたディレクトリのみホストに書き込まれる。それ以外のホストは触れない |
 
 ホストの `~/.claude/settings.json` はマウントしていない。`statusLine` がホスト絶対パスを参照し、`sandbox.enabled` がコンテナ内で二重サンドボックスになるため。
@@ -54,11 +66,11 @@ worktree は `<リポジトリの親>/wt_<name>_<リポジトリ名>` に作ら�
 
 ### settings.json の反映
 
-リポジトリの `settings.json` を編集すれば次の起動で反映される。`/mnt/settings.json` に read-only で渡し、entrypoint がコンテナ側へマージする（**ホスト側が優先**、それ以外の既存キーは保持）。
+リポジトリの `settings.json` を編集すれば次の起動で反映される。`/mnt/settings.json` に read-only で渡し、ENTRYPOINT の `claude --settings /mnt/settings.json` が読む。
 
-単一ファイルをそのまま `~/.claude/settings.json` に bind mount しない理由は、claude が atomic write（tmp に書いて rename）を使うため。bind mount された単一ファイルは rename で置換できず `Device or resource busy` になる。
+`~/.claude/settings.json` にコピーせず直接読ませているので、claude 自身が書いた `theme` などはコンテナ側にそのまま残る。逆にリポジトリの `settings.json` に書いたキーは、コンテナ内で変更しても次の起動で戻る。
 
-マージ方式なので、claude 自身が書いた `theme` などはコンテナ側に残る。逆にホストの `settings.json` に書いたキーは、コンテナ内で変更しても次の起動で戻る。
+ENTRYPOINT に固定しているため、compose を通さず素の `docker run` をするとこのファイルが無くて起動できない。
 
 `.npmrc` の `minimum-release-age=43200` で、公開から 30 日経ったバージョンのみ入る。
 

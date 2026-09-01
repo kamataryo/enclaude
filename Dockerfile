@@ -12,9 +12,10 @@ RUN corepack enable \
  && pnpm install --frozen-lockfile \
  && ln -s /opt/dclaude/node_modules/.bin/claude /usr/local/bin/claude
 
-COPY --chmod=755 entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN mkdir -p /home/node/.claude && chown -R node:node /home/node
 
 USER node
 WORKDIR /workspace
-ENTRYPOINT ["entrypoint.sh"]
+# compose が ./settings.json を ro で渡す。claude はこのファイルに書き込まないので
+# bind mount のままで問題ない（~/.claude/settings.json へコピーする必要がない）
+ENTRYPOINT ["claude", "--settings", "/mnt/settings.json"]

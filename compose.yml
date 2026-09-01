@@ -1,13 +1,16 @@
 services:
   claude:
     build: .
+    working_dir: ${WORKSPACE:-/workspace}
     volumes:
-      - ${WORKSPACE:-./workspace}:/workspace
+      # ホストと同じパスにマウントする。履歴は ~/.claude/projects/<cwd> に置かれるので、
+      # /workspace 固定だと全プロジェクトの履歴が 1 つに混ざって --resume が使いにくい
+      - ${WORKSPACE:-./workspace}:${WORKSPACE:-/workspace}
       # オンボーディング状態とプロジェクト履歴は ~/.claude.json（.claude の外）にあるので
       # ホームごと永続化する。.claude だけだと毎回初回起動になる
       - home:/home/node
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      # entrypoint が起動のたびに ~/.claude/settings.json へコピーする
+      # claude --settings で読ませる。書き込まれないので ro の bind mount でよい
       - ./settings.json:/mnt/settings.json:ro
     stdin_open: true
     tty: true

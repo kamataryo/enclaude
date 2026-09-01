@@ -47,6 +47,9 @@ check "worktree が残っている"  '[ -d "$tmp/wt_dirty_repo" ]'
 check "ブランチが残っている"    'git -C "$repo" rev-parse --verify -q wt/dclaude/dirty >/dev/null'
 git -C "$repo" worktree remove --force "$tmp/wt_dirty_repo"
 
+echo "help は claude に渡らず自前で表示する"
+check "worktree の行がある" '"$here/bin/dclaude" help | grep -q "dclaude worktree"'
+
 echo "補完スクリプトが両シェルで読める"
 check "bash" 'bash -c "eval \"\$($here/bin/dclaude --completion)\" && complete -p dclaude >/dev/null"'
 if command -v zsh >/dev/null; then
