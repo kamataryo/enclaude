@@ -39,7 +39,7 @@ eval "$(enclaudé completion)" # 補完。bash / zsh 両対応
 
 ### Claude の設定を上書きする（任意）
 
-claude に渡す設定はリポジトリの `settings.json` に入っています。ホストの `~/.claude/settings.json` はコンテナからは見えない設定としているため、持ち込みたい設定がある場合は `settings.override.json`（git 管理外）に書いてください。
+claude に渡す設定はリポジトリの `settings.json` に入っています。ホストの `~/.claude/settings.json` はコンテナから見えない設定としているため、持ち込みたい設定がある場合は `settings.override.json`（Git 管理外）に書いてください。
 起動時に `settings.json` へ重ねてマージされ、同じキーは override 側が勝ちます。
 
 ```shell
@@ -68,7 +68,7 @@ enclaudé # 初回起動はコンテナが自動でビルドされます
 - ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 - コンテナ自体がサンドボックスなので、`--dangerously-skip-permissions` を付けて起動します
 - 初回起動時に Claude へのログインが求められます
-- claude-code の自動アップデートは `DISABLE_AUTOUPDATER=1` で無効化しています。アップデートしたい場合は、以下の手順でアップデートしてください
+- Claude Code の自動アップデートは `DISABLE_AUTOUPDATER=1` で無効化しています。アップデートしたい場合は、以下の手順でアップデートしてください
 
 ### claude-code を更新する
 
