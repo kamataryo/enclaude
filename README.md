@@ -13,7 +13,7 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 git clone git@github.com:kamataryo/enclaude.git
 ```
 
-以下を `.zshrc`（bash なら `.bashrc`）に追記します。/path/to/enclode は git clone したパスに読み替えてください。
+以下を `.zshrc`（bash なら `.bashrc`）に追記します。`/path/to/enclode` は git clone したパスに読み替えてください。
 
 ```sh
 export PATH="/path/to/enclaude/bin:$PATH"
