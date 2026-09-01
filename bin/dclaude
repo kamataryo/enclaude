@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# シンボリックリンク経由で呼ばれてもリポジトリを見つける
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  src="$(cd "$(dirname "$src")" && pwd)/$(readlink "$src")"
+done
+repo="$(cd "$(dirname "$src")/.." && pwd)"
+
+compose() { docker-compose -f "$repo/compose.yml" "$@"; }
+
+run() {
+  local ws="$1"; shift
+  WORKSPACE="$ws" compose run --rm claude "$@"
+}
+
+cmd_self_update() {
+  command -v pnpm >/dev/null || { echo "pnpm が見つかりません" >&2; exit 1; }
+  # ホスト側は node_modules を作らない。実体を入れるのはコンテナのビルドだけ
+  (cd "$repo" && pnpm update --latest --lockfile-only)
+  compose build
+  echo
+  echo "更新しました。差分: git -C $repo diff pnpm-lock.yaml"
+}
+
+cmd_worktree() {
+  local name="${1:?usage: dclaude worktree <name>}"; shift
+  local root branch dir base_sha
+  root="$(git rev-parse --show-toplevel)"
+  branch="wt/dclaude/${name}"
+  dir="${root}/../wt_${name}_$(basename "$root")"
+  base_sha="$(git rev-parse HEAD)"
+
+  git worktree add -b "$branch" "$dir"
+  run "$dir" "$@" || true
+
+  if [ -n "$(git -C "$dir" status --porcelain)" ]; then
+    echo "未コミットの変更があるので残します: $dir"
+    return
+  fi
+
+  local head_sha
+  head_sha="$(git -C "$dir" rev-parse HEAD)"
+
+  # ponytail: untracked や他プロセスが掴んでいると remove は失敗する。そのときは残す
+  git worktree remove "$dir" || { echo "worktree を削除できないので残します: $dir"; return; }
+
+  if [ "$head_sha" = "$base_sha" ]; then
+    git branch -d "$branch"
+    echo "worktree とブランチ $branch を削除しました"
+  else
+    echo "worktree を削除しました（ブランチ $branch は残しています）"
+  fi
+}
+
+cmd_completion() {
+  cat <<'EOF'
+if [ -n "${ZSH_VERSION:-}" ]; then
+  _dclaude() { _arguments '1: :(self-update worktree --completion)' '*::arg:_files'; }
+  compdef _dclaude dclaude
+else
+  _dclaude() {
+    [ "$COMP_CWORD" -eq 1 ] || return 0
+    COMPREPLY=($(compgen -W "self-update worktree --completion" -- "${COMP_WORDS[1]}"))
+  }
+  complete -F _dclaude dclaude
+fi
+EOF
+}
+
+case "${1:-}" in
+  self-update)  shift; cmd_self_update "$@" ;;
+  worktree)     shift; cmd_worktree "$@" ;;
+  --completion) cmd_completion ;;
+  *)            run "$PWD" "$@" ;;
+esac

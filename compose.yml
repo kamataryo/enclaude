@@ -3,11 +3,12 @@ services:
     build: .
     volumes:
       - ${WORKSPACE:-./workspace}:/workspace
-      - claude-home:/home/node/.claude
+      # オンボーディング状態とプロジェクト履歴は ~/.claude.json（.claude の外）にあるので
+      # ホームごと永続化する。.claude だけだと毎回初回起動になる
+      - home:/home/node
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      - ./settings.json:/home/node/.claude/settings.json:ro
     stdin_open: true
     tty: true
 
 volumes:
-  claude-home:
+  home:
