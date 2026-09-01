@@ -5,7 +5,6 @@ claude-code を Docker のサンドボックスで動かすラッパー。
 ## 必要なもの
 
 - Docker
-- Docker Compose
 - bash
 
 ## インストール
@@ -14,7 +13,7 @@ claude-code を Docker のサンドボックスで動かすラッパー。
 git clone git@github.com:kamataryo/enclaude.git
 ```
 
-`.zshrc`（bash なら `.bashrc`）に追記する。
+以下を `.zshrc`（bash なら `.bashrc`）に追記する。
 
 ```sh
 export PATH="/path/to/enclaude/bin:$PATH"
@@ -23,13 +22,12 @@ eval "$(enclaudé completion)"          # 補完。bash / zsh 両対応
 
 シェルを開き直してからイメージを用意する。
 
-```sh
-cd /path/to/enclaude
-pnpm install --lockfile-only   # ロックだけ作る。ホストに node_modules は要らない
-docker-compose build
-```
-
 ## 使い方
+
+```shell
+cd <作業ディレクトリ>
+encaludé
+```
 
 | | |
 |---|---|
