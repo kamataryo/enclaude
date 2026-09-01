@@ -12,6 +12,8 @@ compose() { docker-compose -f "$repo/compose.yml" "$@"; }
 
 run() {
   local ws="$1"; shift
+  # bind mount のソースが無いと Docker がディレクトリとして作ってしまうので、先に空ファイルを置く
+  [ -e "$HOME/.claude/CLAUDE.md" ] || { mkdir -p "$HOME/.claude"; : > "$HOME/.claude/CLAUDE.md"; }
   # claude 自身の終了メッセージは `claude --resume <id>` と出る（ネイティブバイナリなので直せない）。
   # session-id をこちらで決めておき、終了後に enclaudé 版の案内を上書きで出す
   local sid=""

@@ -1,10 +1,13 @@
 # enclaudé
 
-claude-code を Docker のサンドボックスで動かすラッパー
+claude-code を Docker のサンドボックスで動かすラッパー。worktree 
 
 ## 必要なもの
 
-Docker / Docker Compose、pnpm、bash。
+- Docker
+- Docker Compose
+- bash
+- Git
 
 ## インストール
 
@@ -36,6 +39,8 @@ docker-compose build
 | `enclaudé self-update` | `pnpm update --latest` でロックを更新し、イメージを再ビルド |
 | `enclaudé help` | enclaudé 自身のヘルプ。`--help` / `-h` は claude のヘルプ（そのまま渡る） |
 | `enclaudé completion` | 補完スクリプトを出力 |
+
+※ ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 
 ### worktree の後片付け
 
