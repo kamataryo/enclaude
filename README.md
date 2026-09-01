@@ -1,6 +1,6 @@
 # Enclaudé
 
-Claude Code を Docker のサンドボックスで動かすラッパーです。
+Claude Code を Docker のサンドボックスで動かすラッパーです。  
 enclave + Claude = enclaudé
 
 ## 必要なもの
