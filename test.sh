@@ -49,6 +49,10 @@ git -C "$repo" worktree remove --force "$tmp/wt_dirty_repo"
 
 echo "補完スクリプトが両シェルで読める"
 check "bash" 'bash -c "eval \"\$($here/bin/dclaude --completion)\" && complete -p dclaude >/dev/null"'
-check "zsh"  'zsh -c "autoload -U compinit; compinit -u -d $tmp/zcd >/dev/null 2>&1; eval \"\$($here/bin/dclaude --completion)\"; [[ \$(whence -w _dclaude) == *function ]]"'
+if command -v zsh >/dev/null; then
+  check "zsh" 'zsh -c "autoload -U compinit; compinit -u -d $tmp/zcd >/dev/null 2>&1; eval \"\$($here/bin/dclaude --completion)\"; [[ \$(whence -w _dclaude) == *function ]]"'
+else
+  echo "  skip: zsh がないので省略"
+fi
 
 [ "$fail" -eq 0 ] && echo "全部通りました" || { echo "失敗あり" >&2; exit 1; }

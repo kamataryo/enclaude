@@ -1,4 +1,5 @@
 {
   "model": "opus",
-  "language": "Japanese"
+  "language": "Japanese",
+  "remoteControlAtStartup": true
 }

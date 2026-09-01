@@ -12,11 +12,9 @@ RUN corepack enable \
  && pnpm install --frozen-lockfile \
  && ln -s /opt/dclaude/node_modules/.bin/claude /usr/local/bin/claude
 
-# settings.json は read-only マウントにしない。claude 自身がテーマ等を書き込むため、
-# イメージに焼いて named volume の初期値として渡す
-COPY settings.json /home/node/.claude/settings.json
-RUN chown -R node:node /home/node
+COPY --chmod=755 entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN mkdir -p /home/node/.claude && chown -R node:node /home/node
 
 USER node
 WORKDIR /workspace
-ENTRYPOINT ["claude"]
+ENTRYPOINT ["entrypoint.sh"]
