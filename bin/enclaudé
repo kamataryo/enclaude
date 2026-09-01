@@ -74,7 +74,7 @@ enclaudé — claude-code を Docker のサンドボックスで動かすラッ�
   enclaudé worktree <name>  wt/enclaude/<name> の worktree を作って起動。終了時に後片付け
   enclaudé self-update      claude-code を最新にしてイメージを再ビルド
   enclaudé help             このヘルプ
-  enclaudé --completion     補完スクリプトを出力（eval "$(enclaudé --completion)"）
+  enclaudé completion     補完スクリプトを出力（eval "$(enclaudé completion)"）
 
 claude 自身のオプションは enclaudé --help（そのまま claude に渡ります）
 EOF
@@ -83,12 +83,12 @@ EOF
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _enclaude() { _arguments '1: :(self-update worktree help --completion)' '*::arg:_files'; }
+  _enclaude() { _arguments '1: :(self-update worktree help completion)' '*::arg:_files'; }
   compdef _enclaude enclaudé
 else
   _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "self-update worktree help --completion" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "self-update worktree help completion" -- "${COMP_WORDS[1]}"))
   }
   complete -F _enclaude enclaudé
 fi
@@ -99,6 +99,6 @@ case "${1:-}" in
   self-update)  shift; cmd_self_update "$@" ;;
   worktree)     shift; cmd_worktree "$@" ;;
   help)         cmd_help ;;
-  --completion) cmd_completion ;;
+  completion)   cmd_completion ;;
   *)            run "$PWD" "$@" ;;
 esac

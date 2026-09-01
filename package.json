@@ -1,6 +1,7 @@
 {
   "name": "enclaude",
   "private": true,
+  "license": "MIT",
   "dependencies": {
     "@anthropic-ai/claude-code": "latest"
   }

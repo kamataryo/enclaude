@@ -51,9 +51,9 @@ echo "help は claude に渡らず自前で表示する"
 check "worktree の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé worktree"'
 
 echo "補完スクリプトが両シェルで読める"
-check "bash" 'bash -c "eval \"\$($here/bin/enclaudé --completion)\" && complete -p enclaudé >/dev/null"'
+check "bash" 'bash -c "eval \"\$($here/bin/enclaudé completion)\" && complete -p enclaudé >/dev/null"'
 if command -v zsh >/dev/null; then
-  check "zsh" 'zsh -c "autoload -U compinit; compinit -u -d $tmp/zcd >/dev/null 2>&1; eval \"\$($here/bin/enclaudé --completion)\"; [[ \$(whence -w _enclaude) == *function ]]"'
+  check "zsh" 'zsh -c "autoload -U compinit; compinit -u -d $tmp/zcd >/dev/null 2>&1; eval \"\$($here/bin/enclaudé completion)\"; [[ \$(whence -w _enclaude) == *function ]]"'
 else
   echo "  skip: zsh がないので省略"
 fi
