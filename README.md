@@ -7,7 +7,6 @@ claude-code を Docker のサンドボックスで動かすラッパー。
 - Docker
 - Docker Compose
 - bash
-- Git
 
 ## インストール
 
@@ -35,18 +34,18 @@ docker-compose build
 | | |
 |---|---|
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動。引数はそのまま claude に渡る |
-| `enclaudé self-update` | `pnpm update --latest` でロックを更新し、イメージを再ビルド |
 | `enclaudé help` | enclaudé 自身のヘルプ。`--help` / `-h` は claude のヘルプ（そのまま渡る） |
 | `enclaudé completion` | 補完スクリプトを出力 |
 
 ※ ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 
-### worktree で並行作業する
+### claude-code を更新する
 
-`enclaudé` はカレントディレクトリをマウントするだけなので、worktree の中で普通に起動すればよい。
+`pnpm-lock.yaml` でバージョンを固定しているので、ロックを更新してイメージを再ビルドする。
 
 ```sh
-git worktree add -b wt/foo ../wt_foo && pushd ../wt_foo && enclaudé ; popd
+pushd /path/to/enclaude
+pnpm update --latest --lockfile-only   # 最新に上げる。範囲内で引き直すだけなら pnpm install --lockfile-only
+docker-compose build
+popd
 ```
-
-片付けは `git worktree remove ../wt_foo`。
