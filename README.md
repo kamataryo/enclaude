@@ -2,6 +2,23 @@
 
 Claude Code を Docker のサンドボックスで動かすラッパーです。
 
+## できること / できないこと
+
+### できること
+
+- カレントディレクトリだけをマウントして Claude Code を隔離した環境で起動します
+- ログイン状態や会話履歴は永続化されます
+- ホストの `~/.claude/CLAUDE.md` は読み取り専用で共有されます
+
+### できないこと
+
+- マウントしたディレクトリの外にあるホストのファイルの読み書き
+- ホストの `~/.claude/settings.json` やスキル・エージェント類の引き継ぎ（必要な設定は `settings.override.json` に書いてください）
+- ホストのブラウザや GUI を必要とする機能（Claude in Chrome など）
+- Git や GitHub の操作（ホスト環境の Git の設定や、GitHub の認証情報は持ち込みません）
+- コンテナを起動するようなタスク（Docker in Docker はありません）
+- ネットワークの遮断（コンテナから外部へは自由に通信できます）
+
 ## 必要なもの
 
 - Docker
@@ -13,7 +30,7 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 git clone git@github.com:kamataryo/enclaude.git
 ```
 
-以下を `.zshrc`（bash なら `.bashrc`）に追記します。`/path/to/enclode` は git clone したパスに読み替えてください。
+以下を `.zshrc`（bash なら `.bashrc`）に追記します。`/path/to/enclaude` は `git clone` したパスに読み替えてください。
 
 ```shell
 export PATH="/path/to/enclaude/bin:$PATH"
@@ -22,7 +39,7 @@ eval "$(enclaudé completion)" # 補完。bash / zsh 両対応
 
 ### Claude の設定を上書きする（任意）
 
-claude に渡す設定はリポジトリの `settings.json` に入っています。ホストの `~/.claude/settings.json` はコンテナからはみない設定なので、持ち込みたい設定がある場合は `settings.override.json`（git 管理外）に書いてください。
+claude に渡す設定はリポジトリの `settings.json` に入っています。ホストの `~/.claude/settings.json` はコンテナからは見えない設定としているため、持ち込みたい設定がある場合は `settings.override.json`（git 管理外）に書いてください。
 起動時に `settings.json` へ重ねてマージされ、同じキーは override 側が勝ちます。
 
 ```shell
@@ -38,15 +55,15 @@ popd
 
 ```shell
 cd <作業ディレクトリ>
-enclaudé
+enclaudé # 初回起動はコンテナが自動でビルドされます
 ```
 
-| コマンド| 適用 |
+| コマンド| 動作 |
 |---|---|
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動します。引数はそのまま claude に渡ります |
 | `enclaudé help` | enclaudé 自身のヘルプです。`--help` / `-h` は claude のヘルプ（そのまま渡ります） |
 | `enclaudé completion` | 補完スクリプトを出力します |
-| `enclaudé destroy` | コンテナ・イメージ・ボリュームを削除します（確認あり） |
+| `enclaudé destroy` | コンテナ・イメージ・ボリュームを削除します。ログイン状態も消えます |
 
 - ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 - コンテナ自体がサンドボックスなので、`--dangerously-skip-permissions` を付けて起動します
@@ -57,7 +74,7 @@ enclaudé
 
 `pnpm-lock.yaml` でバージョンを固定しているので、ロックを更新してイメージを再ビルドします。
 
-```sh
+```shell
 pushd /path/to/enclaude
 pnpm update --latest --lockfile-only   # 最新に上げる。範囲内で引き直すだけなら pnpm install --lockfile-only
 docker compose build
