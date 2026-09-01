@@ -1,0 +1,13 @@
+services:
+  claude:
+    build: .
+    volumes:
+      - ${WORKSPACE:-./workspace}:/workspace
+      - claude-home:/home/node/.claude
+      - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
+      - ./settings.json:/home/node/.claude/settings.json:ro
+    stdin_open: true
+    tty: true
+
+volumes:
+  claude-home:
