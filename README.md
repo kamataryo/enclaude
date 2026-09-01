@@ -36,6 +36,7 @@ docker-compose build
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動。引数はそのまま claude に渡る |
 | `enclaudé help` | enclaudé 自身のヘルプ。`--help` / `-h` は claude のヘルプ（そのまま渡る） |
 | `enclaudé completion` | 補完スクリプトを出力 |
+| `enclaudé destroy` | コンテナ・イメージ・ボリュームを削除（確認あり） |
 
 ※ ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 

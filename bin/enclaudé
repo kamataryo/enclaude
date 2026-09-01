@@ -17,11 +17,19 @@ run() {
   WORKSPACE="$ws" compose run --rm claude "$@"
 }
 
+cmd_destroy() {
+  printf 'コンテナ・イメージ・ボリュームを削除します（コンテナ内のログインと履歴が消えます。ホストの ~/.claude はそのまま）。続行しますか? [y/N] '
+  read -r ans
+  [ "$ans" = "y" ] || { echo "中止しました"; return 0; }
+  compose down --rmi local -v
+}
+
 cmd_help() {
   cat <<'EOF'
 enclaudé — claude-code を Docker のサンドボックスで動かすラッパー
 
   enclaudé [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
+  enclaudé destroy          コンテナ・イメージ・ボリュームを削除
   enclaudé help             このヘルプ
   enclaudé completion       補完スクリプトを出力（eval "$(enclaudé completion)"）
 
@@ -32,12 +40,12 @@ EOF
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _enclaude() { _arguments '1: :(help completion)' '*::arg:_files'; }
+  _enclaude() { _arguments '1: :(help completion destroy)' '*::arg:_files'; }
   compdef _enclaude enclaudé
 else
   _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "help completion" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "help completion destroy" -- "${COMP_WORDS[1]}"))
   }
   complete -F _enclaude enclaudé
 fi
@@ -47,5 +55,6 @@ EOF
 case "${1:-}" in
   help)         cmd_help ;;
   completion)   cmd_completion ;;
+  destroy)      cmd_destroy ;;
   *)            run "$PWD" "$@" ;;
 esac

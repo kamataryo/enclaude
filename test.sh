@@ -10,7 +10,10 @@ fail=0
 check() { if eval "$2"; then echo "  ok: $1"; else echo "  NG: $1"; fail=1; fi; }
 
 echo "help は claude に渡らず自前で表示する"
-check "self-update の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé self-update"'
+check "destroy の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé destroy"'
+
+echo "destroy は N なら何もしない"
+check "中止する" 'echo n | "$here/bin/enclaudé" destroy | grep -q 中止'
 
 echo "補完スクリプトが両シェルで読める"
 check "bash" 'bash -c "eval \"\$($here/bin/enclaudé completion)\" && complete -p enclaudé >/dev/null"'
