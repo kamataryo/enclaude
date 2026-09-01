@@ -18,4 +18,5 @@ USER node
 WORKDIR /workspace
 # compose が ./settings.json を ro で渡す。claude はこのファイルに書き込まないので
 # bind mount のままで問題ない（~/.claude/settings.json へコピーする必要がない）
-ENTRYPOINT ["claude", "--settings", "/mnt/settings.json"]
+# コンテナ自体がサンドボックスなので、権限確認はスキップして起動する
+ENTRYPOINT ["claude", "--settings", "/mnt/settings.json", "--dangerously-skip-permissions"]

@@ -38,6 +38,8 @@ encaludé
 
 ※ ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 
+※ コンテナ自体がサンドボックスなので、`--dangerously-skip-permissions` を付けて起動します（権限確認なし）。claude-code の自動アップデートは `DISABLE_AUTOUPDATER=1` で無効化しています
+
 ### claude-code を更新する
 
 `pnpm-lock.yaml` でバージョンを固定しているので、ロックを更新してイメージを再ビルドする。
