@@ -1,6 +1,6 @@
 # enclaudé
 
-claude-code を Docker のサンドボックスで動かすラッパー。worktree 
+claude-code を Docker のサンドボックスで動かすラッパー。
 
 ## 必要なもの
 
@@ -35,19 +35,18 @@ docker-compose build
 | | |
 |---|---|
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動。引数はそのまま claude に渡る |
-| `enclaudé worktree <name>` | `wt/enclaude/<name>` の worktree を作って起動。終了時に後片付け |
 | `enclaudé self-update` | `pnpm update --latest` でロックを更新し、イメージを再ビルド |
 | `enclaudé help` | enclaudé 自身のヘルプ。`--help` / `-h` は claude のヘルプ（そのまま渡る） |
 | `enclaudé completion` | 補完スクリプトを出力 |
 
 ※ ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 
-### worktree の後片付け
+### worktree で並行作業する
 
-worktree は `<リポジトリの親>/wt_<name>_<リポジトリ名>` に作られ、終了時の状態で分岐する。
+`enclaudé` はカレントディレクトリをマウントするだけなので、worktree の中で普通に起動すればよい。
 
-| 状態 | worktree | ブランチ |
-|---|---|---|
-| 未コミットの変更あり | 残す | 残す |
-| コミット済み | 削除 | 残す |
-| 変更もコミットもなし | 削除 | 削除 |
+```sh
+git worktree add -b wt/foo ../wt_foo && pushd ../wt_foo && enclaudé ; popd
+```
+
+片付けは `git worktree remove ../wt_foo`。

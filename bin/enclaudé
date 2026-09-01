@@ -38,45 +38,14 @@ cmd_self_update() {
   echo "更新しました。差分: git -C $repo diff pnpm-lock.yaml"
 }
 
-cmd_worktree() {
-  local name="${1:?usage: enclaudé worktree <name>}"; shift
-  local root branch dir base_sha
-  root="$(git rev-parse --show-toplevel)"
-  branch="wt/enclaude/${name}"
-  dir="${root}/../wt_${name}_$(basename "$root")"
-  base_sha="$(git rev-parse HEAD)"
-
-  git worktree add -b "$branch" "$dir"
-  run "$dir" "$@" || true
-
-  if [ -n "$(git -C "$dir" status --porcelain)" ]; then
-    echo "未コミットの変更があるので残します: $dir"
-    return
-  fi
-
-  local head_sha
-  head_sha="$(git -C "$dir" rev-parse HEAD)"
-
-  # ponytail: untracked や他プロセスが掴んでいると remove は失敗する。そのときは残す
-  git worktree remove "$dir" || { echo "worktree を削除できないので残します: $dir"; return; }
-
-  if [ "$head_sha" = "$base_sha" ]; then
-    git branch -d "$branch"
-    echo "worktree とブランチ $branch を削除しました"
-  else
-    echo "worktree を削除しました（ブランチ $branch は残しています）"
-  fi
-}
-
 cmd_help() {
   cat <<'EOF'
 enclaudé — claude-code を Docker のサンドボックスで動かすラッパー
 
   enclaudé [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
-  enclaudé worktree <name>  wt/enclaude/<name> の worktree を作って起動。終了時に後片付け
   enclaudé self-update      claude-code を最新にしてイメージを再ビルド
   enclaudé help             このヘルプ
-  enclaudé completion     補完スクリプトを出力（eval "$(enclaudé completion)"）
+  enclaudé completion       補完スクリプトを出力（eval "$(enclaudé completion)"）
 
 claude 自身のオプションは enclaudé --help（そのまま claude に渡ります）
 EOF
@@ -85,12 +54,12 @@ EOF
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _enclaude() { _arguments '1: :(self-update worktree help completion)' '*::arg:_files'; }
+  _enclaude() { _arguments '1: :(self-update help completion)' '*::arg:_files'; }
   compdef _enclaude enclaudé
 else
   _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "self-update worktree help completion" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "self-update help completion" -- "${COMP_WORDS[1]}"))
   }
   complete -F _enclaude enclaudé
 fi
@@ -99,7 +68,6 @@ EOF
 
 case "${1:-}" in
   self-update)  shift; cmd_self_update "$@" ;;
-  worktree)     shift; cmd_worktree "$@" ;;
   help)         cmd_help ;;
   completion)   cmd_completion ;;
   *)            run "$PWD" "$@" ;;
