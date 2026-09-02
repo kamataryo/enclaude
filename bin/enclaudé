@@ -44,12 +44,41 @@ cmd_rebuild() {
   compose build
 }
 
+# ロックの packages セクションから claude-code 本体のバージョンを拾う。
+# -darwin-arm64 などのサブパッケージは `claude-code@` で終わらないので引っかからない
+lock_version() { sed -n "s|^  '@anthropic-ai/claude-code@\(.*\)':\$|\1|p" "$1" | head -1; }
+
 cmd_self_update() {
+  # 上がる先は pnpm を走らせるまで分からないので、先にロックだけ更新して差分を見せる。
+  # 断られたら戻せるように控えを取っておく（git 管理外の編集中でも壊さないよう cp で）
+  for f in package.json pnpm-lock.yaml; do cp "$repo/$f" "$repo/$f.bak"; done
   # ホストに pnpm を用意させたくないので、ロックの更新はコンテナの中で行う。
   # Dockerfile と同じ corepack 経由の pnpm を使わないとロックの形式がずれる。
   # root で書くとホスト側で root 所有のファイルが残るので、最後に呼び出し元へ返す
   docker run --rm -v "$repo:/w" -w /w node:22-slim sh -c \
     "corepack enable && pnpm update --latest --lockfile-only; s=\$?; chown $(id -u):$(id -g) package.json pnpm-lock.yaml 2>/dev/null; exit \$s"
+
+  if cmp -s "$repo/pnpm-lock.yaml" "$repo/pnpm-lock.yaml.bak"; then
+    rm -f "$repo/package.json.bak" "$repo/pnpm-lock.yaml.bak"
+    echo "claude-code $(lock_version "$repo/pnpm-lock.yaml") は最新です。再ビルドは不要です"
+    return 0
+  fi
+
+  printf 'claude-code %s -> %s に更新します。イメージを再ビルドしますか? [Y/n] ' \
+    "$(lock_version "$repo/pnpm-lock.yaml.bak")" "$(lock_version "$repo/pnpm-lock.yaml")"
+  read -r ans
+  case "$ans" in
+    ''|y|Y)
+      rm -f "$repo/package.json.bak" "$repo/pnpm-lock.yaml.bak"
+      ;;
+    *)
+      # 再ビルドしないならロックを戻す。放置するとロックとイメージが食い違い、
+      # 次の起動でも古いイメージがそのまま使われて気付けない
+      for f in package.json pnpm-lock.yaml; do mv "$repo/$f.bak" "$repo/$f"; done
+      echo "中止しました（ロックは元に戻しました）"
+      return 0
+      ;;
+  esac
   cmd_rebuild
 }
 

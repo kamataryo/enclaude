@@ -2,3 +2,4 @@ workspace/
 node_modules/
 settings.override.json
 Dockerfile.override
+*.bak

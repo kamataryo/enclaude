@@ -32,6 +32,11 @@ else
   echo "  skip: node がないので省略"
 fi
 
+echo "lock_version がロックから claude-code のバージョンを抜く"
+# ファイル全体を読み込むと末尾の case が走ってしまうので、関数の定義行だけを取り出して評価する
+eval "$(grep '^lock_version()' "$here/bin/enclaudé")"
+check "セマンティックバージョンが取れる" 'lock_version "$here/pnpm-lock.yaml" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+$"'
+
 echo "補完スクリプトが両シェルで読める"
 check "bash" 'bash -c "eval \"\$($here/bin/enclaudé completion)\" && complete -p enclaudé >/dev/null"'
 if command -v zsh >/dev/null; then
