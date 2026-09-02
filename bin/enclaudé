@@ -44,6 +44,15 @@ cmd_rebuild() {
   compose build
 }
 
+cmd_self_update() {
+  # ホストに pnpm を用意させたくないので、ロックの更新はコンテナの中で行う。
+  # Dockerfile と同じ corepack 経由の pnpm を使わないとロックの形式がずれる。
+  # root で書くとホスト側で root 所有のファイルが残るので、最後に呼び出し元へ返す
+  docker run --rm -v "$repo:/w" -w /w node:22-slim sh -c \
+    "corepack enable && pnpm update --latest --lockfile-only; s=\$?; chown $(id -u):$(id -g) package.json pnpm-lock.yaml 2>/dev/null; exit \$s"
+  cmd_rebuild
+}
+
 cmd_destroy() {
   printf 'コンテナ・イメージ・ボリュームを削除します（コンテナ内のログインと履歴が消えます。ホストの ~/.claude はそのまま）。続行しますか? [y/N] '
   read -r ans
@@ -60,6 +69,7 @@ enclaudé — claude-code を Docker のサンドボックスで動かすラッ�
   enclaudé [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
   enclaudé edit             Dockerfile.override を $EDITOR で編集（初回は sample から作成）
   enclaudé rebuild          イメージを再ビルド（Dockerfile / Dockerfile.override を変えたら実行）
+  enclaudé self-update      claude-code を最新に更新して再ビルド（pnpm-lock.yaml を更新）
   enclaudé destroy          コンテナ・イメージ・ボリュームを削除
   enclaudé help             このヘルプ
   enclaudé completion       補完スクリプトを出力（eval "$(enclaudé completion)"）
@@ -71,12 +81,12 @@ EOF
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _enclaude() { _arguments '1: :(help completion edit rebuild destroy)' '*::arg:_files'; }
+  _enclaude() { _arguments '1: :(help completion edit rebuild self-update destroy)' '*::arg:_files'; }
   compdef _enclaude enclaudé
 else
   _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "help completion edit rebuild destroy" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "help completion edit rebuild self-update destroy" -- "${COMP_WORDS[1]}"))
   }
   complete -F _enclaude enclaudé
 fi
@@ -88,6 +98,7 @@ case "${1:-}" in
   completion)   cmd_completion ;;
   edit)         cmd_edit ;;
   rebuild)      cmd_rebuild ;;
+  self-update)  cmd_self_update ;;
   destroy)      cmd_destroy ;;
   *)            run "$PWD" "$@" ;;
 esac

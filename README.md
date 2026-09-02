@@ -96,20 +96,22 @@ enclaudé # 初回起動はコンテナが自動でビルドされます
 | `enclaudé completion` | 補完スクリプトを出力します |
 | `enclaudé edit` | `Dockerfile.override` を `$EDITOR` で開きます。無ければ `Dockerfile.override.sample` からコピーします |
 | `enclaudé rebuild` | イメージを再ビルドします。`Dockerfile` や `Dockerfile.override` を変えたら実行してください |
+| `enclaudé self-update` | claude-code を最新のバージョンに更新して、イメージを再ビルドします |
 | `enclaudé destroy` | コンテナ・イメージ・ボリュームを削除します。ログイン状態も消えます |
 
 - ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 - コンテナ自体がサンドボックスなので、`--dangerously-skip-permissions` を付けて起動します
 - 初回起動時に Claude へのログインが求められます
-- Claude Code の自動アップデートは `DISABLE_AUTOUPDATER=1` で無効化しています。アップデートしたい場合は、以下の手順でアップデートしてください
+- Claude Code の自動アップデートは `DISABLE_AUTOUPDATER=1` で無効化しています。更新は `enclaudé self-update` で行ってください
 
 ### claude-code を更新する
 
 `pnpm-lock.yaml` でバージョンを固定しているので、ロックを更新してイメージを再ビルドします。
 
 ```shell
-pushd /path/to/enclaude
-pnpm update --latest --lockfile-only   # 最新に上げる。範囲内で引き直すだけなら pnpm install --lockfile-only
-enclaudé rebuild
-popd
+enclaudé self-update
 ```
+
+ロックの更新はコンテナの中で行うので、ホストに Node.js や pnpm は必要ありません。更新後はそのまま再ビルドまで走ります。
+
+`.npmrc` の `minimum-release-age` を設定しているので、公開から 30 日以上経ったバージョンだけが対象になります。出たばかりのバージョンには上がりません。
