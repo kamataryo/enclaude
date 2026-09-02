@@ -59,13 +59,10 @@ popd
 
 ### ランタイムやツールを追加する（任意）
 
-イメージには Node.js と Git しか入っていません。PHP や Python など作業に必要なものは、`Dockerfile.override`（Git 管理外）でベースイメージの上に重ねられます。サンプルをコピーして編集してください。
+イメージには Node.js と Git しか入っていません。PHP や Python など作業に必要なものは、`Dockerfile.override`（Git 管理外）でベースイメージの上に重ねられます。
 
 ```shell
-pushd /path/to/enclaude
-cp Dockerfile.override.sample Dockerfile.override
-vi ./Dockerfile.override
-popd
+enclaudé edit     # $EDITOR で開きます。初回は Dockerfile.override.sample からコピーされます
 enclaudé rebuild
 ```
 
@@ -97,6 +94,7 @@ enclaudé # 初回起動はコンテナが自動でビルドされます
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動します。引数はそのまま claude に渡ります |
 | `enclaudé help` | enclaudé 自身のヘルプです。`--help` / `-h` は claude のヘルプ（そのまま渡ります） |
 | `enclaudé completion` | 補完スクリプトを出力します |
+| `enclaudé edit` | `Dockerfile.override` を `$EDITOR` で開きます。無ければ `Dockerfile.override.sample` からコピーします |
 | `enclaudé rebuild` | イメージを再ビルドします。`Dockerfile` や `Dockerfile.override` を変えたら実行してください |
 | `enclaudé destroy` | コンテナ・イメージ・ボリュームを削除します。ログイン状態も消えます |
 

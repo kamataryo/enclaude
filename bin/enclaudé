@@ -32,6 +32,13 @@ run() {
   WORKSPACE="$ws" compose run --rm claude "$@"
 }
 
+cmd_edit() {
+  # 初回は sample から起こす。リポジトリのパスを覚えなくてよくするのがこのコマンドの主目的
+  [ -e "$repo/Dockerfile.override" ] || cp "$repo/Dockerfile.override.sample" "$repo/Dockerfile.override"
+  ${EDITOR:-vi} "$repo/Dockerfile.override"
+  echo "変更したら enclaudé rebuild を実行してください"
+}
+
 cmd_rebuild() {
   overlay
   compose build
@@ -51,6 +58,7 @@ cmd_help() {
 enclaudé — claude-code を Docker のサンドボックスで動かすラッパー
 
   enclaudé [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
+  enclaudé edit             Dockerfile.override を $EDITOR で編集（初回は sample から作成）
   enclaudé rebuild          イメージを再ビルド（Dockerfile / Dockerfile.override を変えたら実行）
   enclaudé destroy          コンテナ・イメージ・ボリュームを削除
   enclaudé help             このヘルプ
@@ -63,12 +71,12 @@ EOF
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _enclaude() { _arguments '1: :(help completion rebuild destroy)' '*::arg:_files'; }
+  _enclaude() { _arguments '1: :(help completion edit rebuild destroy)' '*::arg:_files'; }
   compdef _enclaude enclaudé
 else
   _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "help completion rebuild destroy" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "help completion edit rebuild destroy" -- "${COMP_WORDS[1]}"))
   }
   complete -F _enclaude enclaudé
 fi
@@ -78,6 +86,7 @@ EOF
 case "${1:-}" in
   help)         cmd_help ;;
   completion)   cmd_completion ;;
+  edit)         cmd_edit ;;
   rebuild)      cmd_rebuild ;;
   destroy)      cmd_destroy ;;
   *)            run "$PWD" "$@" ;;

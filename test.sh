@@ -12,6 +12,7 @@ check() { if eval "$2"; then echo "  ok: $1"; else echo "  NG: $1"; fail=1; fi; 
 echo "help は claude に渡らず自前で表示する"
 check "destroy の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé destroy"'
 check "rebuild の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé rebuild"'
+check "edit の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé edit"'
 
 echo "destroy は N なら何もしない"
 check "中止する" 'echo n | "$here/bin/enclaudé" destroy | grep -q 中止'
