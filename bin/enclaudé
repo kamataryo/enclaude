@@ -54,9 +54,11 @@ cmd_self_update() {
   for f in package.json pnpm-lock.yaml; do cp "$repo/$f" "$repo/$f.bak"; done
   # ホストに pnpm を用意させたくないので、ロックの更新はコンテナの中で行う。
   # Dockerfile と同じ corepack 経由の pnpm を使わないとロックの形式がずれる。
+  # store-dir はコンテナ内に置く。既定だと /w と同じファイルシステム（= リポジトリ直下）に
+  # .pnpm-store が作られ、コンテナが消えてもホスト側に残ってしまう。
   # root で書くとホスト側で root 所有のファイルが残るので、最後に呼び出し元へ返す
   docker run --rm -v "$repo:/w" -w /w node:22-slim sh -c \
-    "corepack enable && pnpm update --latest --lockfile-only; s=\$?; chown $(id -u):$(id -g) package.json pnpm-lock.yaml 2>/dev/null; exit \$s"
+    "corepack enable && pnpm update --latest --lockfile-only --store-dir /tmp/pnpm-store; s=\$?; chown $(id -u):$(id -g) package.json pnpm-lock.yaml 2>/dev/null; exit \$s"
 
   if cmp -s "$repo/pnpm-lock.yaml" "$repo/pnpm-lock.yaml.bak"; then
     rm -f "$repo/package.json.bak" "$repo/pnpm-lock.yaml.bak"
