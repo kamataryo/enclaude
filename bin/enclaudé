@@ -10,13 +10,31 @@ repo="$(cd "$(dirname "$src")/.." && pwd)"
 
 compose() { docker compose -f "$repo/compose.yml" "$@"; }
 
+# Dockerfile.override があれば、ベースを enclaude-base として焼いてから皮をかぶせる。
+# compose 側は dockerfile: ${ENCLAUDE_DOCKERFILE:-Dockerfile} で受ける
+overlay() {
+  [ -e "$repo/Dockerfile.override" ] || return 0
+  if [ "${1:-}" = quiet ]; then
+    docker build -q -t enclaude-base "$repo" >/dev/null
+  else
+    docker build -t enclaude-base "$repo"
+  fi
+  export ENCLAUDE_DOCKERFILE=Dockerfile.override
+}
+
 run() {
   ws="$1"; shift
   # bind mount のソースが無いと Docker がディレクトリとして作ってしまうので、先に空ファイルを置く
   [ -e "$HOME/.claude/CLAUDE.md" ] || { mkdir -p "$HOME/.claude"; : > "$HOME/.claude/CLAUDE.md"; }
   # override は任意なので、無ければ空の JSON を置いておく（マウント先がディレクトリになるのを防ぐ）
   [ -e "$repo/settings.override.json" ] || echo '{}' > "$repo/settings.override.json"
+  overlay quiet
   WORKSPACE="$ws" compose run --rm claude "$@"
+}
+
+cmd_rebuild() {
+  overlay
+  compose build
 }
 
 cmd_destroy() {
@@ -24,6 +42,8 @@ cmd_destroy() {
   read -r ans
   [ "$ans" = "y" ] || { echo "中止しました"; return 0; }
   compose down --rmi local -v
+  # overlay で焼いたベースは compose の管理外なので個別に消す
+  docker image rm -f enclaude-base >/dev/null 2>&1 || true
 }
 
 cmd_help() {
@@ -31,6 +51,7 @@ cmd_help() {
 enclaudé — claude-code を Docker のサンドボックスで動かすラッパー
 
   enclaudé [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
+  enclaudé rebuild          イメージを再ビルド（Dockerfile / Dockerfile.override を変えたら実行）
   enclaudé destroy          コンテナ・イメージ・ボリュームを削除
   enclaudé help             このヘルプ
   enclaudé completion       補完スクリプトを出力（eval "$(enclaudé completion)"）
@@ -42,12 +63,12 @@ EOF
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _enclaude() { _arguments '1: :(help completion destroy)' '*::arg:_files'; }
+  _enclaude() { _arguments '1: :(help completion rebuild destroy)' '*::arg:_files'; }
   compdef _enclaude enclaudé
 else
   _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "help completion destroy" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "help completion rebuild destroy" -- "${COMP_WORDS[1]}"))
   }
   complete -F _enclaude enclaudé
 fi
@@ -57,6 +78,7 @@ EOF
 case "${1:-}" in
   help)         cmd_help ;;
   completion)   cmd_completion ;;
+  rebuild)      cmd_rebuild ;;
   destroy)      cmd_destroy ;;
   *)            run "$PWD" "$@" ;;
 esac

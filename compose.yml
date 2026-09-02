@@ -1,6 +1,9 @@
 services:
   claude:
-    build: .
+    # Dockerfile.override があるときは bin/enclaudé が ENCLAUDE_DOCKERFILE を差し替える
+    build:
+      context: .
+      dockerfile: ${ENCLAUDE_DOCKERFILE:-Dockerfile}
     working_dir: ${WORKSPACE:-/workspace}
     volumes:
       # ホストと同じパスにマウントする。履歴は ~/.claude/projects/<cwd> に置かれるので、

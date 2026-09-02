@@ -9,6 +9,7 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 - カレントディレクトリだけをマウントして Claude Code を隔離した環境で起動します
 - ログイン状態や会話履歴は永続化されます
 - ホストの `~/.claude/CLAUDE.md` は読み取り専用で共有されます
+- 足りないランタイムやツールは `Dockerfile.override` でイメージに重ねられます
 
 ### できないこと
 
@@ -56,6 +57,34 @@ popd
 
 ホスト固有のパス（`hooks` や `env` など）はコンテナ内では壊れた参照になるので、まるごとコピーせず必要な項目だけ残してください。
 
+### ランタイムやツールを追加する（任意）
+
+イメージには Node.js と Git しか入っていません。PHP や Python など作業に必要なものは、`Dockerfile.override`（Git 管理外）でベースイメージの上に重ねられます。サンプルをコピーして編集してください。
+
+```shell
+pushd /path/to/enclaude
+cp Dockerfile.override.sample Dockerfile.override
+vi ./Dockerfile.override
+popd
+enclaudé rebuild
+```
+
+```dockerfile
+FROM enclaude-base
+
+# apt を使うので root に切り替え、最後に node へ戻します
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends php-cli \
+ && rm -rf /var/lib/apt/lists/*
+USER node
+```
+
+`Dockerfile.override` があると、enclaudé はまずリポジトリの `Dockerfile` を `enclaude-base` としてビルドし、その上に `Dockerfile.override` を重ねたイメージで起動します。無ければ今までどおり `Dockerfile` だけでビルドします。
+
+- 作ったとき・書き換えたとき・消したときは `enclaudé rebuild` が必要です
+- `settings.override.json` と同じく全プロジェクト共通です。プロジェクトごとに中身を変えることはできません
+
 ## 使い方
 
 ```shell
@@ -68,6 +97,7 @@ enclaudé # 初回起動はコンテナが自動でビルドされます
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動します。引数はそのまま claude に渡ります |
 | `enclaudé help` | enclaudé 自身のヘルプです。`--help` / `-h` は claude のヘルプ（そのまま渡ります） |
 | `enclaudé completion` | 補完スクリプトを出力します |
+| `enclaudé rebuild` | イメージを再ビルドします。`Dockerfile` や `Dockerfile.override` を変えたら実行してください |
 | `enclaudé destroy` | コンテナ・イメージ・ボリュームを削除します。ログイン状態も消えます |
 
 - ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
@@ -82,6 +112,6 @@ enclaudé # 初回起動はコンテナが自動でビルドされます
 ```shell
 pushd /path/to/enclaude
 pnpm update --latest --lockfile-only   # 最新に上げる。範囲内で引き直すだけなら pnpm install --lockfile-only
-docker compose build
+enclaudé rebuild
 popd
 ```

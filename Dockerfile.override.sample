@@ -1,0 +1,21 @@
+# ベースイメージ（このリポジトリの Dockerfile）に、自分用のランタイムやツールを重ねるためのファイル。
+#
+#   cp Dockerfile.override.sample Dockerfile.override
+#   vi Dockerfile.override
+#   enclaudé rebuild
+#
+# Dockerfile.override は Git 管理外です。存在するときだけ enclaudé が
+# ベースを enclaude-base として焼き、このファイルをその上にビルドします。
+FROM enclaude-base
+
+# apt を使うので root に切り替えます。最後に node へ戻すのを忘れないでください
+USER root
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      php-cli \
+ && rm -rf /var/lib/apt/lists/*
+
+USER node
+
+# ENTRYPOINT / WORKDIR / 環境変数はベースから引き継がれるので、書き直す必要はありません
