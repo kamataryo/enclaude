@@ -110,4 +110,4 @@ enclaudé # 初回起動はコンテナが自動でビルドされます
 enclaudé self-update
 ```
 
-公開直後のバージョンを掴まないよう、`pnpm-workspace.yaml` の `minimumReleaseAge`（分）で 7 日の待機を設けています。
+公開直後のバージョンを掴まないよう、`pnpm-workspace.yaml` の `minimumReleaseAge`（分）で 1 日の待機を設けています。
