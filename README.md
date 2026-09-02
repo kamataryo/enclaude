@@ -19,10 +19,15 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 - コンテナを起動するようなタスク（Docker in Docker はありません）
 - ネットワークの遮断（コンテナから外部へは自由に通信できます）
 
+## 動作環境
+
+- Mac => OK
+- Linux => 多分 OK
+- Windows => 未検証
+
 ## 必要なもの
 
 - Docker
-- bash
 
 ## インストール
 

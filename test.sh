@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # enclaudé の help と補完スクリプトを検証する。Docker は不要。
-set -euo pipefail
+set -eu
 
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+here="$(cd "$(dirname "$0")" && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/enclaude-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
