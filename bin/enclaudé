@@ -52,13 +52,22 @@ cmd_self_update() {
   # 上がる先は pnpm を走らせるまで分からないので、先にロックだけ更新して差分を見せる。
   # 断られたら戻せるように控えを取っておく（git 管理外の編集中でも壊さないよう cp で）
   for f in package.json pnpm-lock.yaml; do cp "$repo/$f" "$repo/$f.bak"; done
-  # ホストに pnpm を用意させたくないので、ロックの更新はコンテナの中で行う。
-  # Dockerfile と同じ corepack 経由の pnpm を使わないとロックの形式がずれる。
+  # ロックは update ではなく捨てて引き直す。pnpm は既存ロックも minimumReleaseAge で検証するので、
+  # update だと「今のロックが新しすぎる」だけで止まってしまう。
+  # specifier が "latest" なので install だけでポリシー適合の最新に解決される。
   # store-dir はコンテナ内に置く。既定だと /w と同じファイルシステム（= リポジトリ直下）に
   # .pnpm-store が作られ、コンテナが消えてもホスト側に残ってしまう。
   # root で書くとホスト側で root 所有のファイルが残るので、最後に呼び出し元へ返す
-  docker run --rm -v "$repo:/w" -w /w node:22-slim sh -c \
-    "corepack enable && pnpm update --latest --lockfile-only --store-dir /tmp/pnpm-store; s=\$?; chown $(id -u):$(id -g) package.json pnpm-lock.yaml 2>/dev/null; exit \$s"
+  # ホストに pnpm を用意させたくないので、ロックの更新はコンテナの中で行う。
+  # Dockerfile と同じ corepack 経由の pnpm を使わないとロックの形式がずれる
+  if ! docker run --rm -v "$repo:/w" -w /w node:22-slim sh -c \
+    "corepack enable && rm -f pnpm-lock.yaml && pnpm install --lockfile-only --store-dir /tmp/pnpm-store; s=\$?; chown $(id -u):$(id -g) package.json pnpm-lock.yaml 2>/dev/null; exit \$s"
+  then
+    # set -e に任せて抜けるとロックを消したまま中断してしまうので、ここで必ず戻す
+    for f in package.json pnpm-lock.yaml; do mv "$repo/$f.bak" "$repo/$f"; done
+    echo "ロックの更新に失敗しました（元に戻しました）" >&2
+    return 1
+  fi
 
   if cmp -s "$repo/pnpm-lock.yaml" "$repo/pnpm-lock.yaml.bak"; then
     rm -f "$repo/package.json.bak" "$repo/pnpm-lock.yaml.bak"

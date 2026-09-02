@@ -1,3 +1,5 @@
 # claude-code の postinstall が native バイナリを配置する。false だと起動しない
 allowBuilds:
   '@anthropic-ai/claude-code': true
+
+minimumReleaseAge: 1440
