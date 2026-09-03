@@ -9,7 +9,7 @@ RUN apt-get update \
 
 # claude-code のバージョンは pnpm-lock.yaml で固定する（enclaudé self-update で更新）。
 # ロックは全プラットフォームの optional 依存を持つので、Mac で生成したものをそのまま使える
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc /opt/enclaude/
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /opt/enclaude/
 RUN corepack enable \
  && cd /opt/enclaude \
  && pnpm install --frozen-lockfile \

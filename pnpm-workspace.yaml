@@ -2,4 +2,5 @@
 allowBuilds:
   '@anthropic-ai/claude-code': true
 
+# 分単位。.npmrc の minimum-release-age は秒扱いになる罠があるのでこちらで設定する
 minimumReleaseAge: 1440
