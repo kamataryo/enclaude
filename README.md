@@ -15,7 +15,7 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 
 - マウントしたディレクトリの外にあるホストのファイルの読み書き
 - ホストの `~/.claude/settings.json` やスキル・エージェント類の引き継ぎ（必要な設定は `settings.override.json` に、プラグインは `Dockerfile.override` に書いてください）
-- ホストのブラウザや GUI を必要とする機能（Claude in Chrome など）
+- ホストのブラウザや GUI を必要とする機能（Claude in Chrome など。必要なときは、これらはホスト側の Claude Code で実行するのが簡単だと思います）
 - Git や GitHub の操作（ホスト環境の Git の設定や、GitHub の認証情報は持ち込みません）
 - コンテナを起動するようなタスク（Docker in Docker はありません）
 - ネットワークの遮断（コンテナから外部へは自由に通信できます）
