@@ -9,6 +9,8 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 - カレントディレクトリだけをマウントして Claude Code を隔離した環境で起動します
 - ログイン状態や会話履歴は永続化されます（`home` ボリューム。プロジェクト単位ではなく enclaudé 全体で 1 つです）
 - ホストの `~/.claude/CLAUDE.md` は読み取り専用で共有されます
+- git リポジトリなら、`.git/config` と `.git/hooks` は読み取り専用でマウントします（[守れる範囲](#守れる範囲)）
+- 終了時に、コンテナ内で書き換えられた・削除されたファイルを一覧します（gitignore されたものも含む。[守れる範囲](#守れる範囲)）
 - 足りないランタイムやツールは `Dockerfile.override` でイメージに重ねられます
 
 ### できないこと
@@ -20,6 +22,42 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 - コンテナを起動するようなタスク（Docker in Docker はありません）
 - ネットワークの遮断（コンテナから外部へは自由に通信できます）
 - プロジェクトごとのログイン情報・会話履歴の分離（`home` ボリュームは enclaudé を使う全プロジェクトで共有されるため、あるプロジェクトで動かしたコンテナから、別プロジェクトの会話履歴やログイン情報が見えます）
+
+## 守れる範囲
+
+コンテナの中の claude は、マウントしたディレクトリを自由に書き換えられます。プロンプトインジェクションを受けた場合、その書き換えがホスト側に残るということです。
+
+このうち `.git/hooks` と `.git/config` だけは、ホストで `git commit` した瞬間に実行されてしまうため、読み取り専用でマウントしています。`core.hooksPath` や `.gitattributes` の filter ドライバの定義先も `.git/config` なので、まとめて塞がります。代わりにコンテナ内から `git config` でローカル設定を書き換えることはできません。`.git` がファイルになる worktree や submodule では対象が見つからないため、このガードは効きません。
+
+ただしこれは多層防御の一枚であって、境界ではありません。ホストであとから実行されるものは他にもあります。
+
+- `package.json` の scripts、`Makefile`、`.envrc`、`.vscode/tasks.json`、`.github/workflows`、そしてソースコードそのもの
+- `home` ボリュームの中身（`~/.claude/settings.json` の hooks など）。全プロジェクト共有なので、汚染されると以後すべてのコンテナに効き続けます
+
+マウントしたディレクトリの中身は信用できないものとして扱ってください。とはいえ `git status` は gitignore されたファイルを見せないので、一番危ないもの（`node_modules/`、`.env`、`.claude/settings.local.json`、この repo なら `Dockerfile.override` や `settings.override.json`）ほど目に入りません。そこで終了時に、コンテナ内で書き換えられたファイルを `git diff --stat` の形式でまとめて出します。
+
+```
+コンテナ内で書き換えられたファイル:
+ deploy.sh                  | 0
+ hidden.sh                  | 1 +
+ innocent.conf              | 1 +
+ node_modules/evil/index.js | 1 +
+ 4 files changed, 3 insertions(+)
+ mode change 100644 => 100755 deploy.sh
+ create mode 120000 innocent.conf
+ホストの git が直接読むファイル:
+./.git/hooks/pre-commit
+./.git/modules/sub/hooks/pre-commit
+削除されたファイル:
+./.env
+```
+
+- 検出は mtime ではなく **ctime** で行います。mtime は `touch -r` で戻せますが、ctime を任意の値にする手段はユーザー空間にありません。`chmod +x` しただけの変更や、シンボリックリンクへの差し替えもこれで出ます
+- 一覧は 200 件で切りますが、切ったときは「ほか N 件を省略」と必ず出します。黙って切ると、ゴミを大量に書いて本命を一覧の外へ押し出す隠蔽が成立するためです
+- 削除は起動時のファイル一覧との差分で出します
+- gitignore 済みや untracked のファイルは、一時 index に intent-to-add して差分を取っています。ホスト側の index やステージング状態には触りません
+- `.git/` は基本的に無視しますが、hooks と config は別枠で出します（submodule の `.git/modules/<name>/hooks/` も含む）。上の ro マウントが効かない worktree / submodule では、ここが唯一の気付く手段になるためです
+- 残る弱点は、報告が出る前にコンテナが端末を握っていることです。大量の空行や ANSI エスケープを吐けば報告を画面から流せます。ここは原理的に塞げないので、疑わしいときはスクロールバックを遡ってください
 
 ## 動作環境
 

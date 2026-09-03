@@ -22,6 +22,80 @@ overlay() {
   export ENCLAUDE_DOCKERFILE=Dockerfile.override
 }
 
+# 一覧の表示上限。打ち切ったことは必ず言う（後述）
+max=200
+
+# 走査の対象。.git/ は git status を叩くだけでも index が動くのでノイズになるが、
+# hooks と config だけは例外で見る。これらは ro マウントで書き込みを止めているものの、
+# .git がファイルになる worktree / submodule ではそのガードが効かない。
+# そこを検知でも拾わないと、予防も検知も無い状態になってしまう。
+# submodule のフックは .git/modules/<name>/hooks/ にあるので、深さを固定せず拾う
+scan_files() {
+  # symlink も対象にする（既存ファイルをリンクに差し替える手が -type f では見えない）。
+  # *.sample は git が実行しないので数だけ増えてノイズになる
+  find . \( -type f -o -type l \) \
+    \( -not -path './.git/*' \
+       -o \( -path '*/hooks/*' ! -name '*.sample' \) \
+       -o -name config -o -name config.worktree \) "$@"
+}
+
+# 削除の検出用。開始時と終了時で同じ並びにしたいので照合順序を固定する
+snapshot_files() { scan_files | LC_ALL=C sort; }
+
+# 打ち切った件数を必ず添える。黙って切ると、ゴミを大量に書いて本命を一覧の外へ
+# 押し出す隠蔽が成立してしまう
+omitted() {
+  n="$(echo "$1" | wc -l)"
+  [ "$n" -le "$max" ] || echo "  （ほか $((n - max)) 件を省略）"
+}
+
+# コンテナが書き換えたファイルを、終了後に git の --stat 形式で見せる。
+# git status では見えない gitignore 済み・untracked のファイルこそ見たいので、
+# 対象は自前で集め、一時 index に intent-to-add してから diff を取る
+# （ホストの index は触らない）
+report_changes() {
+  ws="$1"; stamp="$2"
+  # 検出は mtime ではなく ctime で行う。mtime は touch -r で戻せるが、ctime を任意の値に
+  # する手段はユーザー空間に無いので隠蔽できない。chmod だけの変更もこれで拾える
+  changed="$(cd "$ws" && scan_files -cnewer "$stamp")"
+  # .git/ 配下は worktree の外なので git diff の pathspec に渡せない。分けて出す。
+  # ホストの git が直接実行するものなので、stat の 1 行に埋もれるより目立つ方がよい
+  ingit="$(echo "$changed" | grep '^\./\.git/' || :)"
+  files="$(echo "$changed" | grep -v '^\./\.git/' || :)"
+  # 削除は ctime では拾えないので、開始時の一覧との差で出す
+  gone="$(cd "$ws" && snapshot_files | comm -23 "$stamp.before" -)"
+  [ -n "$files$ingit$gone" ] || return 0
+  echo
+  if [ -n "$files" ]; then
+    echo "コンテナ内で書き換えられたファイル:"
+    if idx="$(cd "$ws" && git rev-parse --git-path index 2>/dev/null)"; then
+      GIT_INDEX_FILE="$stamp.index"
+      export GIT_INDEX_FILE
+      # 初回コミット前は index が無い。空のまま進めても tracked がないので実害はない
+      (cd "$ws" && cp "$idx" "$GIT_INDEX_FILE" 2>/dev/null) || :
+      # gitignore 済みも入れたいので --force。パスの空白で壊れないよう NUL 区切りで渡す
+      echo "$files" | head -"$max" | tr '\n' '\0' | (cd "$ws" && xargs -0 git add -N --force -- 2>/dev/null) || :
+      # --summary は mode change やシンボリックリンク化を 1 行で見せてくれる
+      echo "$files" | head -"$max" | tr '\n' '\0' | (cd "$ws" && xargs -0 git diff --stat --summary --) || :
+    else
+      # git リポジトリでなければ一覧だけ出す
+      echo "$files" | head -"$max"
+    fi
+    omitted "$files"
+  fi
+  if [ -n "$ingit" ]; then
+    echo "ホストの git が直接読むファイル:"
+    echo "$ingit" | head -"$max"
+    omitted "$ingit"
+  fi
+  if [ -n "$gone" ]; then
+    echo "削除されたファイル:"
+    echo "$gone" | head -"$max"
+    omitted "$gone"
+  fi
+  unset GIT_INDEX_FILE
+}
+
 run() {
   ws="$1"; shift
   # bind mount のソースが無いと Docker がディレクトリとして作ってしまうので、先に空ファイルを置く
@@ -29,7 +103,24 @@ run() {
   # override は任意なので、無ければ空の JSON を置いておく（マウント先がディレクトリになるのを防ぐ）
   [ -e "$repo/settings.override.json" ] || echo '{}' > "$repo/settings.override.json"
   overlay quiet
-  WORKSPACE="$ws" compose run --rm claude "$@"
+  # ホスト側の git があとで実行するもの（hooks、config の alias や filter ドライバ）は
+  # 書き換えられないように ro で重ねる。core.hooksPath の定義先も config なので一緒に塞がる。
+  # .git がファイルの worktree / submodule や、そもそも git 管理外なら対象が無いので何もしない
+  set -- claude "$@"
+  [ -f "$ws/.git/config" ] && set -- -v "$ws/.git/config:$ws/.git/config:ro" "$@"
+  [ -d "$ws/.git/hooks" ] && set -- -v "$ws/.git/hooks:$ws/.git/hooks:ro" "$@"
+  # 書き換え検出の基準時刻。カーネルの時刻は数ミリ秒単位でしか進まず、同じ刻みの中の
+  # 書き込みは -cnewer で拾えないので、基準を 1 秒だけ過去にずらしておく（BSD / GNU 両対応）
+  stamp="$(mktemp)"
+  touch -t "$(date -v-1S '+%Y%m%d%H%M.%S' 2>/dev/null || date -d '1 second ago' '+%Y%m%d%H%M.%S')" "$stamp"
+  # 削除の検出用。開始時のファイル一覧を控える（1 走査ぶんのコスト）
+  (cd "$ws" && snapshot_files) > "$stamp.before"
+  # claude の終了コードを持ち帰りたいので set -e に殺されないようにする
+  st=0
+  WORKSPACE="$ws" compose run --rm "$@" || st=$?
+  report_changes "$ws" "$stamp"
+  rm -f "$stamp" "$stamp.index" "$stamp.before"
+  return $st
 }
 
 cmd_edit() {
