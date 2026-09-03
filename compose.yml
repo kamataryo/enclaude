@@ -20,8 +20,8 @@ services:
       - ./settings.override.json:/mnt/settings.override.json:ro
     environment:
       # claude-code のバージョンは pnpm-lock.yaml で固定しているので、コンテナ内で
-      # 勝手に自己更新されないようにする（更新はロック更新 + 再ビルドで行う）
-      DISABLE_AUTOUPDATER: "1"
+      # 更新されないようにする（更新はロック更新 + 再ビルドで行う）。
+      DISABLE_UPDATES: "1"
     stdin_open: true
     tty: true
 
