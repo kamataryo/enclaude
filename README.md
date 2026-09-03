@@ -86,10 +86,10 @@ USER node
 
 ```shell
 cd <作業ディレクトリ>
-enclaudé # 初回起動はコンテナが自動でビルドされます
+enclaudé # 初回起動時はコンテナが自動でビルドされます
 ```
 
-| コマンド| 動作 |
+| コマンド | 動作 |
 |---|---|
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動します。引数はそのまま claude に渡ります |
 | `enclaudé help` | enclaudé 自身のヘルプです。`--help` / `-h` は claude のヘルプ（そのまま渡ります） |
@@ -102,7 +102,7 @@ enclaudé # 初回起動はコンテナが自動でビルドされます
 - ホストの `~/.claude/CLAUDE.md` が空の場合、自動で空のファイルを作成します
 - コンテナ自体がサンドボックスなので、`--dangerously-skip-permissions` を付けて起動します
 - 初回起動時に Claude へのログインが求められます
-- Claude Code の自動アップデートは `DISABLE_AUTOUPDATER=1` で無効化しています。更新は `enclaudé self-update` で行ってください
+- Claude Code の更新は `enclaudé self-update` で行ってください
 
 ### claude-code を更新する
 
