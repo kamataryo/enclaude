@@ -1,4 +1,7 @@
-FROM node:22-slim
+# タグだけでなくダイジェストで固定する。node:22-slim は 22-slim のまま中身が入れ替わるため、
+# タグ指定だけだと再ビルドのたびに異なるイメージを引く可能性がある。更新するときは
+# `docker manifest inspect node:22-slim` 等で最新のダイジェストを確認して書き換える
+FROM node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \
