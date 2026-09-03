@@ -22,6 +22,10 @@ services:
       # claude-code のバージョンは pnpm-lock.yaml で固定しているので、コンテナ内で
       # 更新されないようにする（更新はロック更新 + 再ビルドで行う）。
       DISABLE_UPDATES: "1"
+      # ログイン情報を home ボリュームに平文で永続化させたくない場合の任意ルート。
+      # `claude setup-token` で発行した長期トークンをホスト側のシークレット管理から
+      # 都度シェルの環境変数として渡せば、ファイルに書かず claude に渡せる（README 参照）
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
     stdin_open: true
     tty: true
 

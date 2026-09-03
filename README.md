@@ -73,6 +73,19 @@ claude の挙動を変える環境変数は、`settings.override.json` の `env`
 
 使える変数は [Environment variables](https://code.claude.com/docs/en/env-vars) にあります。ただし `CLAUDE_CONFIG_DIR` や `CLAUDE_CODE_TMPDIR` のようにファイルの置き場所を変える変数は、コンテナの永続化（`home` ボリューム）と食い違うので変えないでください。`DISABLE_UPDATES` は enclaudé が `compose.yml` で立てています（バージョンは `pnpm-lock.yaml` で固定し、更新は `enclaudé self-update` で行うため）。
 
+#### ログイン情報をディスクに残さない（任意）
+
+`/login` でのログイン状態は Linux では暗号化されず、`~/.claude/.credentials.json` に平文で保存されます（Claude Code 自体の仕様）。これは `home` ボリュームで永続化されるため、コンテナを使い続ける限りホストのディスク上に残り続けます。
+
+これを避けたい場合は、[`claude setup-token`](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token) で発行した長期トークンを、ホスト側のシークレット管理（macOS Keychain、1Password CLI など）から起動のたびに読み出し、シェルの環境変数として渡してください。
+
+```shell
+export CLAUDE_CODE_OAUTH_TOKEN="$(op read op://vault/claude-token/token)" # 例: 1Password CLI
+enclaudé
+```
+
+トークンはコンテナのプロセス環境にのみ渡され、`settings.override.json` のようなファイルには書き込まれません。ただし `claude setup-token` のトークンは Remote Control や claude.ai connectors のようなサブスクリプション連携機能では使えない制約があります。
+
 ### ランタイムやツールを追加する（任意）
 
 イメージには Node.js と Git しか入っていません。PHP や Python など作業に必要なものは、`Dockerfile.override`（Git 管理外）でベースイメージの上に重ねられます。
