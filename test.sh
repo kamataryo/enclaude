@@ -57,6 +57,21 @@ check "hooks が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git
 check "サービス名の前に並ぶ" 'args "$tmp/proj" | grep -qE -- "(-v [^ ]+:ro ){2}claude$"'
 check "git 管理外なら足さない" '! args "$tmp/plain" | grep -q -- "-v $tmp/plain"'
 
+echo "worktree では本体の gitdir を ro で足す"
+if command -v git >/dev/null; then
+  git init -q "$tmp/wtmain"
+  (cd "$tmp/wtmain" \
+    && git -c user.email=a@b -c user.name=a commit -q --allow-empty -m init \
+    && git worktree add -q "$tmp/wt" -b wt)
+  # 実装と同じ手順で期待値を出す（macOS の /var -> /private/var のような差を吸収する）
+  common="$(cd "$tmp/wt" && cd "$(git rev-parse --git-common-dir)" && pwd)"
+  check "本体の gitdir が ro で渡る" 'args "$tmp/wt" | grep -q -- "-v $common:$common:ro"'
+  check "rw では渡さない" '! args "$tmp/wt" | grep -qE -- "-v $common:$common( |$)"'
+  check "通常のリポジトリには足さない" '! args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git:"'
+else
+  echo "  skip: git がないので省略"
+fi
+
 
 echo "終了後に書き換えられたファイルを報告する"
 # スタブの docker が compose run のときだけ、いろいろ書き換える

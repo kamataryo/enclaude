@@ -109,6 +109,14 @@ run() {
   set -- claude "$@"
   [ -f "$ws/.git/config" ] && set -- -v "$ws/.git/config:$ws/.git/config:ro" "$@"
   [ -d "$ws/.git/hooks" ] && set -- -v "$ws/.git/hooks:$ws/.git/hooks:ro" "$@"
+  # worktree / submodule では .git がファイルで、objects も refs も本体側にある。そこが
+  # マウントに入らないと git が一切使えないので、本体の gitdir を足す。ただし ro に限る。
+  # rw にすると本体の hooks / config をコンテナから書き換えられて、上のガードと同じ穴が
+  # 開く（しかも影響は本体のチェックアウトと他の worktree 全部に及ぶ）。
+  # 読めれば log / diff / blame は通り、index を作れないので add / commit は落ちる
+  [ -f "$ws/.git" ] \
+    && common="$(cd "$ws" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd)" \
+    && set -- -v "$common:$common:ro" "$@"
   # 書き換え検出の基準時刻。カーネルの時刻は数ミリ秒単位でしか進まず、同じ刻みの中の
   # 書き込みは -cnewer で拾えないので、基準を 1 秒だけ過去にずらしておく（BSD / GNU 両対応）
   stamp="$(mktemp)"
