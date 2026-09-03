@@ -14,6 +14,7 @@ check "destroy の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé
 check "rebuild の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé rebuild"'
 check "edit の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé edit"'
 check "self-update の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé self-update"'
+check "diff の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé diff"'
 
 echo "destroy は N なら何もしない"
 check "中止する" 'echo n | "$here/bin/enclaudé" destroy | grep -q 中止'
@@ -105,6 +106,14 @@ if command -v git >/dev/null; then
   check "submodule の hooks も出る" 'grep -q "^\./\.git/modules/sub/hooks/pre-commit$" "$tmp/report.txt"'
   check "mtime を偽装しても出る" 'grep -q "hidden\.sh" "$tmp/report.txt"'
   check "symlink も出る" 'grep -q "evil-link" "$tmp/report.txt"'
+
+  echo "enclaudé diff が直前のセッションの報告を出し直す"
+  d() { (cd "$tmp/proj" && PATH="$tmp/bin:$PATH" HOME="$tmp" "$here/bin/enclaudé" diff); }
+  d > "$tmp/diff.txt"
+  check "終了時と同じ --stat が出る" 'grep -qE "node_modules/evil\.js +\| +1 \+" "$tmp/diff.txt"'
+  check "パッチ本体は出さない" '! grep -q "^+++ b/" "$tmp/diff.txt"'
+  check "削除も出る" 'grep -q "^\./gone\.txt$" "$tmp/diff.txt"'
+  check "記録が無ければ落ちる" '! (cd "$tmp/plain" && PATH="$tmp/bin:$PATH" HOME="$tmp/nostate" "$here/bin/enclaudé" diff) 2>/dev/null'
 else
   echo "  skip: git がないので省略"
 fi

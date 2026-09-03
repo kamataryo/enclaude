@@ -49,12 +49,20 @@ omitted() {
   [ "$n" -le "$max" ] || echo "  （ほか $((n - max)) 件を省略）"
 }
 
-# コンテナが書き換えたファイルを、終了後に git の --stat 形式で見せる。
+# セッションの基準時刻とファイル一覧の控えは、終了後に enclaudé diff から読み直したいので
+# ワークスペースごとに残す（mktemp だと消えるうえ、パスから引き直せない）
+state_stamp() {
+  d="${XDG_STATE_HOME:-$HOME/.local/state}/enclaude"
+  mkdir -p "$d"
+  echo "$d/$(echo "$1" | sed 's|/|%|g')"
+}
+
+# コンテナが書き換えたファイルを、git の --stat 形式で見せる。
 # git status では見えない gitignore 済み・untracked のファイルこそ見たいので、
 # 対象は自前で集め、一時 index に intent-to-add してから diff を取る
 # （ホストの index は触らない）
 report_changes() {
-  ws="$1"; stamp="$2"
+  ws="$1"; stamp="$2"; mode="${3:-run}"
   # 検出は mtime ではなく ctime で行う。mtime は touch -r で戻せるが、ctime を任意の値に
   # する手段はユーザー空間に無いので隠蔽できない。chmod だけの変更もこれで拾える
   changed="$(cd "$ws" && scan_files -cnewer "$stamp")"
@@ -64,13 +72,15 @@ report_changes() {
   files="$(echo "$changed" | grep -v '^\./\.git/' || :)"
   # 削除は ctime では拾えないので、開始時の一覧との差で出す
   gone="$(cd "$ws" && snapshot_files | comm -23 "$stamp.before" -)"
-  [ -n "$files$ingit$gone" ] || return 0
+  [ -n "$files$ingit$gone" ] || { [ "$mode" = run ] || echo "変更はありません"; return 0; }
   echo
   if [ -n "$files" ]; then
     echo "コンテナ内で書き換えられたファイル:"
     if idx="$(cd "$ws" && git rev-parse --git-path index 2>/dev/null)"; then
       GIT_INDEX_FILE="$stamp.index"
       export GIT_INDEX_FILE
+      # 前回の実行で残った index を持ち越さない。消しておけば git が空から作り直す
+      rm -f "$GIT_INDEX_FILE"
       # 初回コミット前は index が無い。空のまま進めても tracked がないので実害はない
       (cd "$ws" && cp "$idx" "$GIT_INDEX_FILE" 2>/dev/null) || :
       # gitignore 済みも入れたいので --force。パスの空白で壊れないよう NUL 区切りで渡す
@@ -119,7 +129,7 @@ run() {
     && set -- -v "$common:$common:ro" "$@"
   # 書き換え検出の基準時刻。カーネルの時刻は数ミリ秒単位でしか進まず、同じ刻みの中の
   # 書き込みは -cnewer で拾えないので、基準を 1 秒だけ過去にずらしておく（BSD / GNU 両対応）
-  stamp="$(mktemp)"
+  stamp="$(state_stamp "$ws")"
   touch -t "$(date -v-1S '+%Y%m%d%H%M.%S' 2>/dev/null || date -d '1 second ago' '+%Y%m%d%H%M.%S')" "$stamp"
   # 削除の検出用。開始時のファイル一覧を控える（1 走査ぶんのコスト）
   (cd "$ws" && snapshot_files) > "$stamp.before"
@@ -127,8 +137,14 @@ run() {
   st=0
   WORKSPACE="$ws" compose run --rm "$@" || st=$?
   report_changes "$ws" "$stamp"
-  rm -f "$stamp" "$stamp.index" "$stamp.before"
   return $st
+}
+
+# 終了時の報告を、あとからもう一度出すためのコマンド（画面を流されても追える）
+cmd_diff() {
+  stamp="$(state_stamp "$PWD")"
+  [ -f "$stamp" ] || { echo "このディレクトリで enclaudé を実行した記録がありません" >&2; return 1; }
+  report_changes "$PWD" "$stamp" diff
 }
 
 cmd_edit() {
@@ -206,6 +222,7 @@ cmd_help() {
 enclaudé — claude-code を Docker のサンドボックスで動かすラッパー
 
   enclaudé [args...]        カレントディレクトリをマウントして起動。引数はそのまま claude に渡る
+  enclaudé diff             直前のセッションでの書き換えを再表示（gitignore 済みも含む）
   enclaudé edit             Dockerfile.override を $EDITOR で編集（初回は sample から作成）
   enclaudé rebuild          イメージを再ビルド（Dockerfile / Dockerfile.override を変えたら実行）
   enclaudé self-update      claude-code を最新に更新して再ビルド（pnpm-lock.yaml を更新）
@@ -220,12 +237,12 @@ EOF
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _enclaude() { _arguments '1: :(help completion edit rebuild self-update destroy)' '*::arg:_files'; }
+  _enclaude() { _arguments '1: :(help completion diff edit rebuild self-update destroy)' '*::arg:_files'; }
   compdef _enclaude enclaudé
 else
   _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "help completion edit rebuild self-update destroy" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "help completion diff edit rebuild self-update destroy" -- "${COMP_WORDS[1]}"))
   }
   complete -F _enclaude enclaudé
 fi
@@ -235,6 +252,7 @@ EOF
 case "${1:-}" in
   help)         cmd_help ;;
   completion)   cmd_completion ;;
+  diff)         cmd_diff ;;
   edit)         cmd_edit ;;
   rebuild)      cmd_rebuild ;;
   self-update)  cmd_self_update ;;

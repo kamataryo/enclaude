@@ -47,6 +47,8 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 ./.env
 ```
 
+この報告は `enclaudé diff` でいつでも出し直せます（直前のセッションの範囲）。
+
 この報告はコンテナが端末を握った後に出るため、大量の空行や ANSI エスケープで画面から流すことは原理的に防げません。疑わしいときはスクロールバックを遡ってください。
 
 ## 動作環境
@@ -84,6 +86,7 @@ enclaudé # 初回起動時はコンテナが自動でビルドされます
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動します。引数はそのまま claude に渡ります |
 | `enclaudé help` | enclaudé 自身のヘルプです。`--help` / `-h` は claude のヘルプ（そのまま渡ります） |
 | `enclaudé completion` | 補完スクリプトを出力します |
+| `enclaudé diff` | 直前のセッションのこの報告をもう一度表示します |
 | `enclaudé edit` | `Dockerfile.override` を `$EDITOR` で開きます。無ければ `Dockerfile.override.sample` からコピーします |
 | `enclaudé rebuild` | イメージを再ビルドします。`Dockerfile` や `Dockerfile.override` を変えたら実行してください |
 | `enclaudé self-update` | claude-code を最新のバージョンに更新して、イメージを再ビルドします |
