@@ -22,6 +22,8 @@ services:
       # claude-code のバージョンは pnpm-lock.yaml で固定しているので、コンテナ内で
       # 更新されないようにする（更新はロック更新 + 再ビルドで行う）。
       DISABLE_UPDATES: "1"
+      # ホストのタイムゾーン。bin/enclaudé が /etc/localtime から解決して渡す
+      TZ: ${TZ:-UTC}
     stdin_open: true
     tty: true
 

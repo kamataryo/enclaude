@@ -50,13 +50,17 @@ echo ".git/config と .git/hooks を ro で重ねる"
 # docker を差し替えて、compose run に渡る引数だけを見る（コンテナは起動しない）
 mkdir -p "$tmp/bin" "$tmp/proj/.git/hooks" "$tmp/plain"
 : > "$tmp/proj/.git/config"
-printf '#!/bin/sh\necho "$@"\n' > "$tmp/bin/docker"
+printf '#!/bin/sh\necho "TZ=$TZ" "$@"\n' > "$tmp/bin/docker"
 chmod +x "$tmp/bin/docker"
 args() { (cd "$1" && PATH="$tmp/bin:$PATH" HOME="$tmp" "$here/bin/enclaudé"); }
 check "config が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git/config:$tmp/proj/.git/config:ro"'
 check "hooks が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git/hooks:$tmp/proj/.git/hooks:ro"'
 check "サービス名の前に並ぶ" 'args "$tmp/proj" | grep -qE -- "(-v [^ ]+:ro ){2}claude$"'
 check "git 管理外なら足さない" '! args "$tmp/plain" | grep -q -- "-v $tmp/plain"'
+
+echo "ホストのタイムゾーンをコンテナへ渡す"
+check "TZ があればそのまま渡る" 'TZ=Asia/Tokyo args "$tmp/proj" | grep -q "^TZ=Asia/Tokyo "'
+check "TZ が無ければ localtime から拾う" '(unset TZ; ln -sf /x/zoneinfo/Asia/Tokyo "$tmp/lt"; readlink "$tmp/lt" | sed -n "s|.*/zoneinfo/||p") | grep -q "^Asia/Tokyo$"'
 
 echo "worktree では本体の gitdir を ro で足す"
 if command -v git >/dev/null; then

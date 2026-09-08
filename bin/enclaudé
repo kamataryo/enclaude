@@ -22,6 +22,10 @@ overlay() {
   export ENCLAUDE_DOCKERFILE=Dockerfile.override
 }
 
+# ホストのタイムゾーンをコンテナへ渡す。macOS は TZ を環境変数に持たないことが多いので、
+# その場合は /etc/localtime のリンク先から拾う（compose 側は ${TZ:-UTC} で受ける）
+host_tz() { [ -n "${TZ:-}" ] && echo "$TZ" || readlink /etc/localtime 2>/dev/null | sed -n 's|.*/zoneinfo/||p'; }
+
 # 一覧の表示上限。打ち切ったことは必ず言う（後述）
 max=200
 
@@ -135,7 +139,7 @@ run() {
   (cd "$ws" && snapshot_files) > "$stamp.before"
   # claude の終了コードを持ち帰りたいので set -e に殺されないようにする
   st=0
-  WORKSPACE="$ws" compose run --rm "$@" || st=$?
+  WORKSPACE="$ws" TZ="$(host_tz)" compose run --rm "$@" || st=$?
   report_changes "$ws" "$stamp"
   return $st
 }
