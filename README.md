@@ -10,7 +10,6 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 - ログイン状態や会話履歴は永続化されます（`home` ボリューム。プロジェクト単位ではなく enclaudé 全体で 1 つです）
 - ホストの `~/.claude/CLAUDE.md` は読み取り専用で共有されます
 - git リポジトリでは `git log` / `git diff` などの読み取り系が使えます（`git add` / `git commit` はできません）
-- 終了時に、コンテナ内で書き換えられた・削除されたファイルを一覧します（gitignore されたものも含む）
 - 足りないランタイムやツールは `Dockerfile.override` でイメージに重ねられます
 
 ### できないこと
@@ -28,28 +27,6 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 コンテナの中の claude は、マウントしたディレクトリを自由に書き換えられます。プロンプトインジェクションを受けた場合、その書き換えがホスト側に残るということです。**マウントしたディレクトリの中身は信用できないものとして扱ってください。**
 
 ホストで `git commit` した瞬間に走る `.git/hooks` と `.git/config` だけは読み取り専用でマウントして塞いでいます。ただし多層防御の一枚であって、境界ではありません。`package.json` の scripts、`Makefile`、`.envrc`、`.vscode/tasks.json`、`.github/workflows`、ソースコードそのものは書き換えられます。`home` ボリュームも全プロジェクト共有なので、汚染されると以後すべてのコンテナに効き続けます。
-
-`git status` は gitignore されたファイルを見せず、一番危ないもの（`node_modules/`、`.env` など）ほど目に入りません。そこで終了時に、書き換えられたファイルをまとめて出します。
-
-```
-コンテナ内で書き換えられたファイル:
- deploy.sh                  | 0
- hidden.sh                  | 1 +
- innocent.conf              | 1 +
- node_modules/evil/index.js | 1 +
- 4 files changed, 3 insertions(+)
- mode change 100644 => 100755 deploy.sh
- create mode 120000 innocent.conf
-ホストの git が直接読むファイル:
-./.git/hooks/pre-commit
-./.git/modules/sub/hooks/pre-commit
-削除されたファイル:
-./.env
-```
-
-この報告は `enclaudé diff` でいつでも出し直せます（直前のセッションの範囲）。
-
-この報告はコンテナが端末を握った後に出るため、大量の空行や ANSI エスケープで画面から流すことは原理的に防げません。疑わしいときはスクロールバックを遡ってください。
 
 ## 動作環境
 
@@ -86,7 +63,6 @@ enclaudé # 初回起動時はコンテナが自動でビルドされます
 | `enclaudé [args...]` | カレントディレクトリをマウントして起動します。引数はそのまま claude に渡ります |
 | `enclaudé help` | enclaudé 自身のヘルプです。`--help` / `-h` は claude のヘルプ（そのまま渡ります） |
 | `enclaudé completion` | 補完スクリプトを出力します |
-| `enclaudé diff` | 直前のセッションのこの報告をもう一度表示します |
 | `enclaudé edit` | `Dockerfile.override` を `$EDITOR` で開きます。無ければ `Dockerfile.override.sample` からコピーします |
 | `enclaudé rebuild` | イメージを再ビルドします。`Dockerfile` や `Dockerfile.override` を変えたら実行してください |
 | `enclaudé self-update` | claude-code を最新のバージョンに更新して、イメージを再ビルドします |

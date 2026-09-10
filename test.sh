@@ -14,7 +14,6 @@ check "destroy の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé
 check "rebuild の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé rebuild"'
 check "edit の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé edit"'
 check "self-update の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé self-update"'
-check "diff の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé diff"'
 
 echo "destroy は N なら何もしない"
 check "中止する" 'echo n | "$here/bin/enclaudé" destroy | grep -q 中止'
@@ -77,52 +76,5 @@ else
   echo "  skip: git がないので省略"
 fi
 
-
-echo "終了後に書き換えられたファイルを報告する"
-# スタブの docker が compose run のときだけ、いろいろ書き換える
-cat > "$tmp/bin/docker" <<'STUB'
-#!/bin/sh
-echo "$@"
-case " $* " in *" run "*) ;; *) exit 0 ;; esac
-mkdir -p node_modules && echo x > node_modules/evil.js
-rm -f gone.txt
-ln -s /etc/passwd evil-link
-if [ -d .git ]; then
-  mkdir -p .git/hooks .git/modules/sub/hooks
-  echo x > .git/hooks/pre-commit
-  echo x > .git/modules/sub/hooks/pre-commit
-fi
-# mtime を 2020 年に偽装する（ctime は戻せないので検出できるはず）
-touch -t 202001010000 ref.tmp && echo p > hidden.sh && touch -r ref.tmp hidden.sh && rm -f ref.tmp
-# 一覧を溢れさせて本命を押し出す隠蔽
-[ -f .flood ] && { i=0; while [ $i -lt 205 ]; do echo x > "flood$i.txt"; i=$((i + 1)); done; }
-exit 0
-STUB
-chmod +x "$tmp/bin/docker"
-if command -v git >/dev/null; then
-  git init -q "$tmp/proj"
-  printf 'node_modules/\n' > "$tmp/proj/.gitignore"
-  echo x > "$tmp/proj/gone.txt"
-  args "$tmp/proj" > "$tmp/report.txt"
-  check "gitignore 済みでも --stat に出る" 'grep -qE "node_modules/evil\.js +\| +1 \+" "$tmp/report.txt"'
-  check "削除されたファイルも出る" 'grep -q "^\./gone\.txt$" "$tmp/report.txt"'
-  check ".git/hooks も出る" 'grep -q "^\./\.git/hooks/pre-commit$" "$tmp/report.txt"'
-  check "submodule の hooks も出る" 'grep -q "^\./\.git/modules/sub/hooks/pre-commit$" "$tmp/report.txt"'
-  check "mtime を偽装しても出る" 'grep -q "hidden\.sh" "$tmp/report.txt"'
-  check "symlink も出る" 'grep -q "evil-link" "$tmp/report.txt"'
-
-  echo "enclaudé diff が直前のセッションの報告を出し直す"
-  d() { (cd "$tmp/proj" && PATH="$tmp/bin:$PATH" HOME="$tmp" "$here/bin/enclaudé" diff); }
-  d > "$tmp/diff.txt"
-  check "終了時と同じ --stat が出る" 'grep -qE "node_modules/evil\.js +\| +1 \+" "$tmp/diff.txt"'
-  check "パッチ本体は出さない" '! grep -q "^+++ b/" "$tmp/diff.txt"'
-  check "削除も出る" 'grep -q "^\./gone\.txt$" "$tmp/diff.txt"'
-  check "記録が無ければ落ちる" '! (cd "$tmp/plain" && PATH="$tmp/bin:$PATH" HOME="$tmp/nostate" "$here/bin/enclaudé" diff) 2>/dev/null'
-else
-  echo "  skip: git がないので省略"
-fi
-mkdir -p "$tmp/flood" && : > "$tmp/flood/.flood"
-check "打ち切ったら件数を言う" 'args "$tmp/flood" | grep -q "件を省略"'
-check "git 管理外なら一覧を出す" 'args "$tmp/plain" | grep -q "./node_modules/evil.js"'
 
 [ "$fail" -eq 0 ] && echo "全部通りました" || { echo "失敗あり" >&2; exit 1; }
