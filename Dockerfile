@@ -3,8 +3,14 @@
 # `docker manifest inspect node:22-slim` 等で最新のダイジェストを確認して書き換える
 FROM node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
 
+# slim には git / curl / less / ps / rg が無い。ripgrep は claude の Grep が使う（無いと grep に
+# フォールバックして遅くノイズも多い）。less は git のページャ、procps は ps、curl は疎通確認用。
+# python3 は Debian 12 の 3.11。PEP 668 でシステムへの pip install は拒否されるので、
+# パッケージは python3-venv で venv を切って入れる（pip は venv の中に ensurepip で入る）
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
+ && apt-get install -y --no-install-recommends \
+      git ca-certificates curl less procps ripgrep \
+      python3 python3-venv \
  && rm -rf /var/lib/apt/lists/*
 
 # claude-code のバージョンは pnpm-lock.yaml で固定する（enclaudé self-update で更新）。

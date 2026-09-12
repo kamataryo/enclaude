@@ -97,7 +97,7 @@ popd
 
 ## ランタイムやツールを追加する（任意）
 
-イメージには Node.js と Git しか入っていません。PHP や Python など作業に必要なものは、`Dockerfile.override`（Git 管理外）でベースイメージの上に重ねられます。`settings.override.json` と同じく全プロジェクト共通です。
+イメージに入っているのは Node.js、Git、Python 3（`python3` / `python3 -m venv`。pip はシステムには無いので venv の中で使います）と、基本的な CLI（`curl` / `less` / `ps` / `rg`）だけです。PHP や Go、`uv` など作業に必要なものは、`Dockerfile.override`（Git 管理外）でベースイメージの上に重ねられます。`settings.override.json` と同じく全プロジェクト共通です。
 
 ```shell
 enclaudé edit     # $EDITOR で開きます。初回は Dockerfile.override.sample からコピーされます
