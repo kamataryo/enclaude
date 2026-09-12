@@ -6,12 +6,18 @@ FROM node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95ea
 # slim には git / curl / less / ps / rg が無い。ripgrep は claude の Grep が使う（無いと grep に
 # フォールバックして遅くノイズも多い）。less は git のページャ、procps は ps、curl は疎通確認用。
 # python3 は Debian 12 の 3.11。PEP 668 でシステムへの pip install は拒否されるので、
-# パッケージは python3-venv で venv を切って入れる（pip は venv の中に ensurepip で入る）
+# パッケージは python3-venv で venv を切るか、下の uv で入れる
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      git ca-certificates curl less procps ripgrep \
+      git ca-certificates curl less procps ripgrep jq unzip zip file \
       python3 python3-venv \
  && rm -rf /var/lib/apt/lists/*
+
+# uv は公式イメージから静的バイナリだけ持ってくる（curl | sh より固定しやすい）。
+# ベースと同じくダイジェストで固定する。更新するときはバージョンを書き換えたうえで
+# `docker manifest inspect astral/uv:<version>` のダイジェスト（amd64 / arm64 を含む index のもの）に差し替える。
+# キャッシュや uv が入れる Python は ~/.cache/uv と ~/.local/share/uv に置かれ、home ボリュームで永続化される
+COPY --from=docker.io/astral/uv:0.12.13@sha256:b485bd65cc2cf1c9a93b3554012c9c3778cf7b1b5fd3d3096ce9e1226c97e1e6 /uv /uvx /usr/local/bin/
 
 # claude-code のバージョンは pnpm-lock.yaml で固定する（enclaudé self-update で更新）。
 # ロックは全プラットフォームの optional 依存を持つので、Mac で生成したものをそのまま使える
