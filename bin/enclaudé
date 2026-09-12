@@ -80,8 +80,10 @@ cmd_self_update() {
   # .pnpm-store が作られ、コンテナが消えてもホスト側に残ってしまう。
   # root で書くとホスト側で root 所有のファイルが残るので、最後に呼び出し元へ返す
   # ホストに pnpm を用意させたくないので、ロックの更新はコンテナの中で行う。
-  # Dockerfile と同じ corepack 経由の pnpm を使わないとロックの形式がずれる
-  if ! docker run --rm -v "$repo:/w" -w /w node:22-slim sh -c \
+  # Dockerfile と同じ corepack 経由の pnpm を使わないとロックの形式がずれるので、
+  # イメージは Dockerfile の FROM 行から取る（ダイジェスト付きのまま渡る）
+  base_image="$(sed -n 's/^FROM \([^ ]*\).*/\1/p' "$repo/Dockerfile" | head -n1)"
+  if ! docker run --rm -v "$repo:/w" -w /w "$base_image" sh -c \
     "corepack enable && rm -f pnpm-lock.yaml && pnpm install --lockfile-only --store-dir /tmp/pnpm-store; s=\$?; chown $(id -u):$(id -g) package.json pnpm-lock.yaml 2>/dev/null; exit \$s"
   then
     # set -e に任せて抜けるとロックを消したまま中断してしまうので、ここで必ず戻す

@@ -1,11 +1,14 @@
-# タグだけでなくダイジェストで固定する。node:22-slim は 22-slim のまま中身が入れ替わるため、
+# タグだけでなくダイジェストで固定する。node:24-trixie-slim はタグのまま中身が入れ替わるため、
 # タグ指定だけだと再ビルドのたびに異なるイメージを引く可能性がある。更新するときは
-# `docker manifest inspect node:22-slim` 等で最新のダイジェストを確認して書き換える
-FROM node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
+# `docker manifest inspect node:24-trixie-slim` 等で最新のダイジェスト（amd64 / arm64 を含む index のもの）を
+# 確認して書き換える。bin/enclaudé の self-update はこの FROM 行を読んで同じイメージを使う。
+# Node 24 は 2028 年 4 月まで LTS。claude-code の要件は Node >= 22。
+# Node 26 以降は corepack が同梱されないので、上げるときは pnpm の入れ方を見直すこと
+FROM node:24-trixie-slim@sha256:6950b66b4c0cb0151ce89fa75074673850763d096b044f422c6729b588dd4956
 
 # slim には git / curl / less / ps / rg が無い。ripgrep は claude の Grep が使う（無いと grep に
 # フォールバックして遅くノイズも多い）。less は git のページャ、procps は ps、curl は疎通確認用。
-# python3 は Debian 12 の 3.11。PEP 668 でシステムへの pip install は拒否されるので、
+# python3 は Debian 13 (trixie) の 3.13。PEP 668 でシステムへの pip install は拒否されるので、
 # パッケージは python3-venv で venv を切るか、下の uv で入れる
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
