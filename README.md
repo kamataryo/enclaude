@@ -9,7 +9,7 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 - カレントディレクトリだけをマウントして Claude Code を隔離した環境で起動します
 - ログイン状態や会話履歴は永続化されます（`home` ボリューム。プロジェクト単位ではなく enclaudé 全体で 1 つです）
 - ホストの `~/.claude/CLAUDE.md` は読み取り専用で共有されます
-- git リポジトリでは `git log` / `git diff` などの読み取り系が使えます（`git add` / `git commit` はできません）
+- git リポジトリでは `git log` / `git diff` などの読み取り系が使えます（`git add` / `git commit` もコンテナの中では通ります。worktree / submodule だけは本体の gitdir を ro で重ねるため落ちます）
 - 足りないランタイムやツールは `Dockerfile.override` でイメージに重ねられます
 
 ### できないこと
@@ -27,7 +27,24 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 
 コンテナの中の claude は、マウントしたディレクトリを自由に書き換えられます。プロンプトインジェクションを受けた場合、その書き換えがホスト側に残るということです。**マウントしたディレクトリの中身は信用できないものとして扱ってください。**
 
-ホストで `git commit` した瞬間に走る `.git/hooks` と `.git/config` だけは読み取り専用でマウントして塞いでいます。ただし多層防御の一枚であって、境界ではありません。`package.json` の scripts、`Makefile`、`.envrc`、`.vscode/tasks.json`、`.github/workflows`、ソースコードそのものは書き換えられます。`home` ボリュームも全プロジェクト共有なので、汚染されると以後すべてのコンテナに効き続けます。
+塞いでいるのは、ホスト側で勝手に実行されるもののうち git のフック周りだけです。読み取り専用でマウントします。
+
+- `.git/config` と `.git/hooks`（ホストで `git commit` した瞬間に走るもの）。hooks ディレクトリが無いリポジトリでは、空で作ってから重ねます
+- `core.hooksPath` がワークスペースの中を指している場合（husky など）はその参照先も。husky v9 のように `.husky/_` を指す構成では、ラッパーが呼び出す親の `.husky/` ごと重ねます
+
+ただし多層防御の一枚であって、境界ではありません。次のものは書き換えられます。
+
+- `package.json` の scripts、`Makefile`、`.envrc`、`.vscode/tasks.json`、`.github/workflows`、ソースコードそのもの
+- `.claude/settings.json` と `.claude/settings.local.json`。ホスト側でそのディレクトリを開いて Claude Code を起動した時点で hooks が走ります
+- `.mcp.json`。同じく、ホストで起動した時点で MCP サーバーの `command` が実行されます
+
+下の 2 つは `git commit` より発火が早い（ホストで `claude` と打っただけで走る）ので、`.git` 周りより危険だと考えてください。
+
+ガード自体が届かないところもあります。
+
+- ワークスペースの中にネストした独立リポジトリの `.git`
+- `~/.claude.json` は読み取り専用にできないので、ユーザースコープの MCP サーバー登録は `home` ボリューム経由で以後のコンテナにも残ります
+- `home` ボリュームは全プロジェクト共有なので、汚染されると以後すべてのコンテナに効き続けます
 
 ## 動作環境
 
