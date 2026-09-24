@@ -58,6 +58,12 @@ check "hooks が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git
 check "サービス名の前に並ぶ" 'args "$tmp/proj" | grep -qE -- "(-v [^ ]+:ro ){2}claude$"'
 check "git 管理外なら足さない" '! args "$tmp/plain" | grep -q -- "-v $tmp/plain"'
 
+echo "hooks ディレクトリが無くても ro で重ねる"
+mkdir -p "$tmp/nohooks/.git"
+: > "$tmp/nohooks/.git/config"
+check "hooks が ro で渡る" 'args "$tmp/nohooks" | grep -q -- "-v $tmp/nohooks/.git/hooks:$tmp/nohooks/.git/hooks:ro"'
+check "空の hooks を作る" '[ -d "$tmp/nohooks/.git/hooks" ]'
+
 echo "危険なディレクトリでは起動しない"
 check "enclaudé 自身を含むと落ちる" '! args "$here" >/dev/null 2>&1'
 check "docker は呼ばれない" '[ -z "$(args "$here" 2>/dev/null)" ]'
@@ -84,5 +90,20 @@ else
   echo "  skip: git がないので省略"
 fi
 
+echo "core.hooksPath がワークスペース内を指すなら ro で重ねる"
+if command -v git >/dev/null; then
+  hooks_path_repo() { git init -q "$tmp/$1"; git -C "$tmp/$1" config core.hooksPath "$2"; mkdir -p "$tmp/$1/$2"; }
+  hooks_path_repo husky9 .husky/_
+  hooks_path_repo husky8 .husky
+  git init -q "$tmp/outside"
+  mkdir -p "$tmp/ext"
+  git -C "$tmp/outside" config core.hooksPath "$tmp/ext"
+  check "husky v9 は親の .husky ごと渡る" 'args "$tmp/husky9" | grep -q -- "-v $tmp/husky9/.husky:$tmp/husky9/.husky:ro"'
+  check "husky v8 も渡る" 'args "$tmp/husky8" | grep -q -- "-v $tmp/husky8/.husky:$tmp/husky8/.husky:ro"'
+  check "ワークスペースの外は足さない" '! args "$tmp/outside" | grep -q -- "$tmp/ext"'
+  check "設定が無ければ足さない" '! args "$tmp/proj" | grep -q -- "husky"'
+else
+  echo "  skip: git がないので省略"
+fi
 
 [ "$fail" -eq 0 ] && echo "全部通りました" || { echo "失敗あり" >&2; exit 1; }

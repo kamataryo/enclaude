@@ -49,11 +49,28 @@ run() {
   [ -e "$repo/settings.override.json" ] || echo '{}' > "$repo/settings.override.json"
   overlay quiet
   # ホスト側の git があとで実行するもの（hooks、config の alias や filter ドライバ）は
-  # 書き換えられないように ro で重ねる。core.hooksPath の定義先も config なので一緒に塞がる。
+  # 書き換えられないように ro で重ねる。
   # .git がファイルの worktree / submodule や、そもそも git 管理外なら対象が無いので何もしない
   set -- claude "$@"
+  # hooks ディレクトリが無いと重ねる対象も無く、コンテナの中から作れてしまうので先に空で作る。
+  # git 自身が新しいリポジトリに作るものと同じなので、ホスト側への影響は無い
+  [ -d "$ws/.git" ] && mkdir -p "$ws/.git/hooks"
   [ -f "$ws/.git/config" ] && set -- -v "$ws/.git/config:$ws/.git/config:ro" "$@"
   [ -d "$ws/.git/hooks" ] && set -- -v "$ws/.git/hooks:$ws/.git/hooks:ro" "$@"
+  # config を ro にすれば core.hooksPath を新しく設定することはできないが、ホスト側で既に
+  # 設定済み（husky など）なら、その参照先はワークスペース内の普通のディレクトリでしかない。
+  # ホストで git commit したときに走るのは同じなので、そこも ro で重ねる。
+  # 相対パスの基準は worktree のルート（git はフックの実行前にそこへ cd する）
+  hp="$(cd "$ws" && git config --get core.hooksPath 2>/dev/null)" || hp=""
+  if [ -n "$hp" ]; then
+    case "$hp" in /*) ;; *) hp="$ws/$hp" ;; esac
+    # husky v9 の hooksPath は .husky/_ で、その中のラッパーが親の .husky/<hook> を実行する。
+    # 参照先だけ ro にしても書き換え放題なので、_ なら親ごと重ねる
+    case "$hp" in */_) hp="${hp%/_}" ;; esac
+    # ワークスペースの外（~/.config/git/hooks など）はそもそもマウントしないので対象外。
+    # $ws 自身に縮んだ場合もここで落ちる（ワークスペース全体を ro にはできない）
+    case "$hp" in "$ws"/*) if [ -d "$hp" ]; then set -- -v "$hp:$hp:ro" "$@"; fi ;; esac
+  fi
   # worktree / submodule では .git がファイルで、objects も refs も本体側にある。そこが
   # マウントに入らないと git が一切使えないので、本体の gitdir を足す。ただし ro に限る。
   # rw にすると本体の hooks / config をコンテナから書き換えられて、上のガードと同じ穴が
