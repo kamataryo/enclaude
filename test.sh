@@ -3,7 +3,8 @@
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/enclaude-test.XXXXXX")"
+# macOS の TMPDIR は末尾が / なので、そのままだとパスに // が混ざって文字列比較がずれる
+tmp="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/enclaude-test.XXXXXX")" && pwd)"
 trap 'rm -rf "$tmp"' EXIT
 
 fail=0
@@ -56,6 +57,13 @@ check "config が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.gi
 check "hooks が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git/hooks:$tmp/proj/.git/hooks:ro"'
 check "サービス名の前に並ぶ" 'args "$tmp/proj" | grep -qE -- "(-v [^ ]+:ro ){2}claude$"'
 check "git 管理外なら足さない" '! args "$tmp/plain" | grep -q -- "-v $tmp/plain"'
+
+echo "危険なディレクトリでは起動しない"
+check "enclaudé 自身を含むと落ちる" '! args "$here" >/dev/null 2>&1'
+check "docker は呼ばれない" '[ -z "$(args "$here" 2>/dev/null)" ]'
+check "\$HOME は落ちる" '! args "$tmp" >/dev/null 2>&1'
+check "/ は落ちる" '! args / >/dev/null 2>&1'
+check "\$HOME の親も落ちる" '! (cd "$tmp/proj" && PATH="$tmp/bin:$PATH" HOME="$tmp/proj/sub" "$here/bin/enclaudé") >/dev/null 2>&1'
 
 echo "ホストのタイムゾーンをコンテナへ渡す"
 check "TZ があればそのまま渡る" 'TZ=Asia/Tokyo args "$tmp/proj" | grep -q "^TZ=Asia/Tokyo "'

@@ -28,6 +28,21 @@ host_tz() { [ -n "${TZ:-}" ] && echo "$TZ" || readlink /etc/localtime 2>/dev/nul
 
 run() {
   ws="$1"; shift
+  # マウントした時点でホスト側に手が届いてしまうディレクトリは、その前に弾く。
+  # enclaudé 自身が入っていると bin/enclaudé を書き換えられ、次の起動でホストの
+  # シェルがそれを実行する（PATH に入っているので、サンドボックスからの脱出になる）
+  case "$repo" in "$ws"|"$ws"/*)
+    echo "enclaudé 自身を含むディレクトリでは起動できません: $ws" >&2; exit 1 ;;
+  esac
+  # $HOME 以上を丸ごと渡すと ~/.ssh や ~/.aws が rw で入る。/Users のような親も同じ
+  case "$ws" in /)
+    echo "/ をそのままマウントするのは危険です" >&2; exit 1 ;;
+  esac
+  # $ws は PWD 由来で正規化済みなので、比較する側も揃える（末尾や二重のスラッシュで素通りする）
+  home="$(cd "$HOME" 2>/dev/null && pwd)" || home="$HOME"
+  case "$home" in "$ws"|"$ws"/*)
+    echo "\$HOME を含むディレクトリでは起動できません: $ws" >&2; exit 1 ;;
+  esac
   # bind mount のソースが無いと Docker がディレクトリとして作ってしまうので、先に空ファイルを置く
   [ -e "$HOME/.claude/CLAUDE.md" ] || { mkdir -p "$HOME/.claude"; : > "$HOME/.claude/CLAUDE.md"; }
   # override は任意なので、無ければ空の JSON を置いておく（マウント先がディレクトリになるのを防ぐ）
