@@ -11,50 +11,68 @@ repo="$(cd "$(dirname "$src")/.." && pwd)"
 compose() { docker compose -f "$repo/compose.yml" "$@"; }
 
 # Dockerfile.override があれば、ベースを enclaude-base として焼いてから皮をかぶせる。
-# compose 側は dockerfile: ${ENCLAUDE_DOCKERFILE:-Dockerfile} で受ける
+# compose 側は dockerfile: ${ENCLAUDE_DOCKERFILE:-Dockerfile} で受ける。
+# 起動時（if-missing）はベースが無いときだけ焼く。あっても compose run は皮を作り直さないので無駄になる
 overlay() {
   [ -e "$repo/Dockerfile.override" ] || return 0
-  if [ "${1:-}" = quiet ]; then
-    docker build -q -t enclaude-base "$repo" >/dev/null
-  else
-    docker build -t enclaude-base "$repo"
-  fi
   export ENCLAUDE_DOCKERFILE=Dockerfile.override
+  if [ "${1:-}" = if-missing ] && docker image inspect enclaude-base >/dev/null 2>&1; then return 0; fi
+  docker build -t enclaude-base "$repo"
 }
 
 # ホストのタイムゾーンをコンテナへ渡す。macOS は TZ を環境変数に持たないことが多いので、
 # その場合は /etc/localtime のリンク先から拾う（compose 側は ${TZ:-UTC} で受ける）
 host_tz() { [ -n "${TZ:-}" ] && echo "$TZ" || readlink /etc/localtime 2>/dev/null | sed -n 's|.*/zoneinfo/||p'; }
 
+# worktree / submodule の本体の gitdir を返す。.git ファイルはコンテナの中から書き換えられるので、
+# 向き先が本当にこのワークスペースのものか確かめる。確かめないと、無関係なリポジトリの .git を
+# 指させるだけで、次の起動でそれがコンテナから読めるようになる。
+# 確かめるのはワークスペースの外（中からは書けない）にある、こちらを指し返す記録
+git_common_dir() {
+  gd="$(cd "$1" && cd "$(git rev-parse --absolute-git-dir 2>/dev/null)" && pwd -P)" || return 1
+  common="$(cd "$1" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" && pwd -P)" || return 1
+  if [ "$gd" = "$common" ]; then
+    # submodule: .git/modules/<name>/config の core.worktree（gitdir からの相対）
+    wt="$(git --git-dir="$gd" config --get core.worktree)" || return 1
+    back="$(cd "$gd" && cd "$wt" && pwd -P)" || return 1
+  else
+    # worktree: 本体の worktrees/<name>/gitdir（相対なら gitdir 基準）。worktrees/ の下であることも
+    # 見ないと、中に偽の gitdir を作って commondir で別のリポジトリへ飛ばせる
+    case "$gd" in "$common"/worktrees/*) ;; *) return 1 ;; esac
+    back="$(cd "$gd" && cd "$(dirname "$(cat gitdir)")" && pwd -P)" || return 1
+  fi
+  [ "$back" = "$1" ] && echo "$common"
+}
+
 run() {
-  ws="$1"; shift
+  # シンボリックリンクを解いておく。Docker はリンクをたどってマウントするので、論理パスのまま
+  # 比べると ~/work/h -> ~ のようなリンク経由で $HOME の判定を素通りする
+  ws="$(pwd -P)"
   # マウントした時点でホスト側に手が届いてしまうディレクトリは、その前に弾く。
   # $HOME 以上を丸ごと渡すと ~/.ssh や ~/.aws が rw で入る。/Users のような親も同じ
   case "$ws" in /)
     echo "/ をそのままマウントするのは危険です" >&2; exit 1 ;;
   esac
-  # $ws は PWD 由来で正規化済みなので、比較する側も揃える（末尾や二重のスラッシュで素通りする）
-  home="$(cd "$HOME" 2>/dev/null && pwd)" || home="$HOME"
+  home="$(cd "$HOME" 2>/dev/null && pwd -P)" || home="$HOME"
   case "$home" in "$ws"|"$ws"/*)
     echo "\$HOME を含むディレクトリでは起動できません: $ws" >&2; exit 1 ;;
+  esac
+  # -v の区切りと衝突する
+  case "$ws" in *:*)
+    echo ": を含むパスはマウントできません: $ws" >&2; exit 1 ;;
   esac
   # bind mount のソースが無いと Docker がディレクトリとして作ってしまうので、先に空ファイルを置く
   [ -e "$HOME/.claude/CLAUDE.md" ] || { mkdir -p "$HOME/.claude"; : > "$HOME/.claude/CLAUDE.md"; }
   # override は任意なので、無ければ空の JSON を置いておく（マウント先がディレクトリになるのを防ぐ）
   [ -e "$repo/settings.override.json" ] || echo '{}' > "$repo/settings.override.json"
-  overlay quiet
-  # ホスト側の git があとで実行するもの（hooks、config の alias や filter ドライバ）は
-  # 書き換えられないように ro で重ねる。
-  # .git がファイルの worktree / submodule や、そもそも git 管理外なら対象が無いので何もしない
+  overlay if-missing
   set -- claude "$@"
-  # hooks ディレクトリが無いと重ねる対象も無く、コンテナの中から作れてしまうので先に空で作る。
-  # git 自身が新しいリポジトリに作るものと同じなので、ホスト側への影響は無い
-  [ -d "$ws/.git" ] && mkdir -p "$ws/.git/hooks"
-  [ -f "$ws/.git/config" ] && set -- -v "$ws/.git/config:$ws/.git/config:ro" "$@"
-  [ -d "$ws/.git/hooks" ] && set -- -v "$ws/.git/hooks:$ws/.git/hooks:ro" "$@"
-  # config を ro にすれば core.hooksPath を新しく設定することはできないが、ホスト側で既に
-  # 設定済み（husky など）なら、その参照先はワークスペース内の普通のディレクトリでしかない。
-  # ホストで git commit したときに走るのは同じなので、そこも ro で重ねる。
+  # ホストの git があとで実行するもの（hooks、config の alias や fsmonitor）を書き換えられないよう、
+  # .git は丸ごと ro で重ねる。config と hooks だけでは足りない。.git/commondir を置かれると git は
+  # config も hooks もその先から読むし、worktree の .git ファイルは向き先そのものを差し替えられる
+  [ -e "$ws/.git" ] && set -- -v "$ws/.git:$ws/.git:ro" "$@"
+  # ホスト側で core.hooksPath が設定済み（husky など）なら、その参照先はワークスペース内の
+  # 普通のディレクトリでしかない。ホストで git commit したときに走るのは同じなので、そこも ro で重ねる。
   # 相対パスの基準は worktree のルート（git はフックの実行前にそこへ cd する）
   hp="$(cd "$ws" && git config --get core.hooksPath 2>/dev/null)" || hp=""
   if [ -n "$hp" ]; then
@@ -66,14 +84,15 @@ run() {
     # $ws 自身に縮んだ場合もここで落ちる（ワークスペース全体を ro にはできない）
     case "$hp" in "$ws"/*) if [ -d "$hp" ]; then set -- -v "$hp:$hp:ro" "$@"; fi ;; esac
   fi
-  # worktree / submodule では .git がファイルで、objects も refs も本体側にある。そこが
-  # マウントに入らないと git が一切使えないので、本体の gitdir を足す。ただし ro に限る。
-  # rw にすると本体の hooks / config をコンテナから書き換えられて、上のガードと同じ穴が
-  # 開く（しかも影響は本体のチェックアウトと他の worktree 全部に及ぶ）。
-  # 読めれば log / diff / blame は通り、index を作れないので add / commit は落ちる
-  [ -f "$ws/.git" ] \
-    && common="$(cd "$ws" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd)" \
-    && set -- -v "$common:$common:ro" "$@"
+  # worktree / submodule では objects も refs も本体側にあり、足さないと git が一切使えない。
+  # rw にすると本体の hooks / config を書き換えられるので ro に限る（log / diff は通る）
+  if [ -f "$ws/.git" ]; then
+    if common="$(git_common_dir "$ws")"; then
+      set -- -v "$common:$common:ro" "$@"
+    else
+      echo "enclaudé: .git の向き先がこのディレクトリのものと確認できないので、本体の gitdir はマウントしません" >&2
+    fi
+  fi
   # claude の終了コードを持ち帰りたいので set -e に殺されないようにする
   st=0
   WORKSPACE="$ws" TZ="$(host_tz)" compose run --rm "$@" || st=$?
@@ -98,29 +117,26 @@ lock_version() { sed -n "s|^  '@anthropic-ai/claude-code@\(.*\)':\$|\1|p" "$1" |
 
 cmd_self_update() {
   # 上がる先は pnpm を走らせるまで分からないので、先にロックだけ更新して差分を見せる。
-  # 断られたら戻せるように控えを取っておく（git 管理外の編集中でも壊さないよう cp で）
+  # 控えは git 管理外の編集中でも壊さないよう cp で取り、途中で抜けたら（失敗・中止・Ctrl-C・EOF）
+  # trap で必ず戻す。ロックとイメージが食い違ったまま残ると、古いイメージが使われ続けて気付けない
   for f in package.json pnpm-lock.yaml; do cp "$repo/$f" "$repo/$f.bak"; done
-  # ロックは update ではなく捨てて引き直す。pnpm は既存ロックも minimumReleaseAge で検証するので、
-  # update だと「今のロックが新しすぎる」だけで止まってしまう。
-  # specifier が "latest" なので install だけでポリシー適合の最新に解決される。
-  # store-dir はコンテナ内に置く。既定だと /w と同じファイルシステム（= リポジトリ直下）に
-  # .pnpm-store が作られ、コンテナが消えてもホスト側に残ってしまう。
-  # root で書くとホスト側で root 所有のファイルが残るので、最後に呼び出し元へ返す
-  # ホストに pnpm を用意させたくないので、ロックの更新はコンテナの中で行う。
-  # Dockerfile と同じ corepack 経由の pnpm を使わないとロックの形式がずれるので、
-  # イメージは Dockerfile の FROM 行から取る（ダイジェスト付きのまま渡る）
+  trap 'for f in package.json pnpm-lock.yaml; do if [ -e "$repo/$f.bak" ]; then mv "$repo/$f.bak" "$repo/$f"; fi; done' EXIT
+  trap 'exit 130' INT TERM
+  # ホストに pnpm を用意させたくないのでコンテナの中で更新する。Dockerfile と同じ corepack 経由の
+  # pnpm でないとロックの形式がずれるので、イメージは FROM 行から取る（ダイジェスト付きのまま）
   base_image="$(sed -n 's/^FROM \([^ ]*\).*/\1/p' "$repo/Dockerfile" | head -n1)"
+  # - ロックは update せず捨てて引き直す。pnpm は既存ロックも minimumReleaseAge で検証するので、
+  #   update だと「今のロックが新しすぎる」だけで止まる。specifier が latest なので install で足りる
+  # - store は既定だとリポジトリ直下の .pnpm-store になってホストに残るので、コンテナ内に置く
+  # - root で書いたファイルはホストで root 所有になるので、呼び出し元に返す
   if ! docker run --rm -v "$repo:/w" -w /w "$base_image" sh -c \
     "corepack enable && rm -f pnpm-lock.yaml && pnpm install --lockfile-only --store-dir /tmp/pnpm-store; s=\$?; chown $(id -u):$(id -g) package.json pnpm-lock.yaml 2>/dev/null; exit \$s"
   then
-    # set -e に任せて抜けるとロックを消したまま中断してしまうので、ここで必ず戻す
-    for f in package.json pnpm-lock.yaml; do mv "$repo/$f.bak" "$repo/$f"; done
-    echo "ロックの更新に失敗しました（元に戻しました）" >&2
+    echo "ロックの更新に失敗しました（元に戻します）" >&2
     return 1
   fi
 
   if cmp -s "$repo/pnpm-lock.yaml" "$repo/pnpm-lock.yaml.bak"; then
-    rm -f "$repo/package.json.bak" "$repo/pnpm-lock.yaml.bak"
     echo "claude-code $(lock_version "$repo/pnpm-lock.yaml") は最新です。再ビルドは不要です"
     return 0
   fi
@@ -129,16 +145,8 @@ cmd_self_update() {
     "$(lock_version "$repo/pnpm-lock.yaml.bak")" "$(lock_version "$repo/pnpm-lock.yaml")"
   read -r ans
   case "$ans" in
-    ''|y|Y)
-      rm -f "$repo/package.json.bak" "$repo/pnpm-lock.yaml.bak"
-      ;;
-    *)
-      # 再ビルドしないならロックを戻す。放置するとロックとイメージが食い違い、
-      # 次の起動でも古いイメージがそのまま使われて気付けない
-      for f in package.json pnpm-lock.yaml; do mv "$repo/$f.bak" "$repo/$f"; done
-      echo "中止しました（ロックは元に戻しました）"
-      return 0
-      ;;
+    ''|y|Y) rm -f "$repo/package.json.bak" "$repo/pnpm-lock.yaml.bak" ;;
+    *) echo "中止しました（ロックは元に戻します）"; return 0 ;;
   esac
   cmd_rebuild
 }
@@ -190,5 +198,5 @@ case "${1:-}" in
   rebuild)      cmd_rebuild ;;
   self-update)  cmd_self_update ;;
   destroy)      cmd_destroy ;;
-  *)            run "$PWD" "$@" ;;
+  *)            run "$@" ;;
 esac

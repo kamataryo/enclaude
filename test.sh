@@ -3,8 +3,9 @@
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
-# macOS の TMPDIR は末尾が / なので、そのままだとパスに // が混ざって文字列比較がずれる
-tmp="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/enclaude-test.XXXXXX")" && pwd)"
+# enclaudé はワークスペースを pwd -P で解くので、期待値も揃える
+# （macOS の TMPDIR は末尾が / で、しかも /var -> /private/var のリンク越し）
+tmp="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/enclaude-test.XXXXXX")" && pwd -P)"
 trap 'rm -rf "$tmp"' EXIT
 
 fail=0
@@ -46,45 +47,78 @@ else
   echo "  skip: zsh がないので省略"
 fi
 
-echo ".git/config と .git/hooks を ro で重ねる"
+echo ".git を丸ごと ro で重ねる"
 # docker を差し替えて、compose run に渡る引数だけを見る（コンテナは起動しない）
-mkdir -p "$tmp/bin" "$tmp/proj/.git/hooks" "$tmp/plain"
+mkdir -p "$tmp/bin" "$tmp/proj/.git" "$tmp/plain"
 : > "$tmp/proj/.git/config"
 printf '#!/bin/sh\necho "TZ=$TZ" "$@"\n' > "$tmp/bin/docker"
 chmod +x "$tmp/bin/docker"
 args() { (cd "$1" && PATH="$tmp/bin:$PATH" HOME="$tmp" "$here/bin/enclaudé"); }
-check "config が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git/config:$tmp/proj/.git/config:ro"'
-check "hooks が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git/hooks:$tmp/proj/.git/hooks:ro"'
-check "サービス名の前に並ぶ" 'args "$tmp/proj" | grep -qE -- "(-v [^ ]+:ro ){2}claude$"'
+check ".git が ro で渡る" 'args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git:$tmp/proj/.git:ro"'
+check "サービス名の前に並ぶ" 'args "$tmp/proj" | grep -qE -- "-v [^ ]+:ro claude$"'
 check "git 管理外なら足さない" '! args "$tmp/plain" | grep -q -- "-v $tmp/plain"'
-
-echo "hooks ディレクトリが無くても ro で重ねる"
-mkdir -p "$tmp/nohooks/.git"
-: > "$tmp/nohooks/.git/config"
-check "hooks が ro で渡る" 'args "$tmp/nohooks" | grep -q -- "-v $tmp/nohooks/.git/hooks:$tmp/nohooks/.git/hooks:ro"'
-check "空の hooks を作る" '[ -d "$tmp/nohooks/.git/hooks" ]'
 
 echo "危険なディレクトリでは起動しない"
 check "\$HOME は落ちる" '! args "$tmp" >/dev/null 2>&1'
 check "docker は呼ばれない" '[ -z "$(args "$tmp" 2>/dev/null)" ]'
 check "/ は落ちる" '! args / >/dev/null 2>&1'
 check "\$HOME の親も落ちる" '! (cd "$tmp/proj" && PATH="$tmp/bin:$PATH" HOME="$tmp/proj/sub" "$here/bin/enclaudé") >/dev/null 2>&1'
+ln -s "$tmp" "$tmp/proj/homelink"
+check "リンク経由の \$HOME も落ちる" '! args "$tmp/proj/homelink" >/dev/null 2>&1'
+mkdir -p "$tmp/a:b"
+check ": を含むパスは落ちる" '! args "$tmp/a:b" >/dev/null 2>&1'
 
 echo "ホストのタイムゾーンをコンテナへ渡す"
 check "TZ があればそのまま渡る" 'TZ=Asia/Tokyo args "$tmp/proj" | grep -q "^TZ=Asia/Tokyo "'
-check "TZ が無ければ localtime から拾う" '(unset TZ; ln -sf /x/zoneinfo/Asia/Tokyo "$tmp/lt"; readlink "$tmp/lt" | sed -n "s|.*/zoneinfo/||p") | grep -q "^Asia/Tokyo$"'
+if [ -L /etc/localtime ]; then
+  eval "$(grep '^host_tz()' "$here/bin/enclaudé")"
+  check "TZ が無ければ localtime のリンク先から拾う" 'tz="$(unset TZ; host_tz)" && [ -n "$tz" ] && readlink /etc/localtime | grep -q "/zoneinfo/$tz$"'
+else
+  echo "  skip: /etc/localtime がリンクでないので省略"
+fi
 
-echo "worktree では本体の gitdir を ro で足す"
+echo "worktree / submodule では、確かめたうえで本体の gitdir を ro で足す"
 if command -v git >/dev/null; then
   git init -q "$tmp/wtmain"
   (cd "$tmp/wtmain" \
     && git -c user.email=a@b -c user.name=a commit -q --allow-empty -m init \
     && git worktree add -q "$tmp/wt" -b wt)
-  # 実装と同じ手順で期待値を出す（macOS の /var -> /private/var のような差を吸収する）
-  common="$(cd "$tmp/wt" && cd "$(git rev-parse --git-common-dir)" && pwd)"
+  common="$tmp/wtmain/.git"
   check "本体の gitdir が ro で渡る" 'args "$tmp/wt" | grep -q -- "-v $common:$common:ro"'
   check "rw では渡さない" '! args "$tmp/wt" | grep -qE -- "-v $common:$common( |$)"'
-  check "通常のリポジトリには足さない" '! args "$tmp/proj" | grep -q -- "-v $tmp/proj/.git:"'
+  check ".git ファイル自体も ro で渡る" 'args "$tmp/wt" | grep -q -- "-v $tmp/wt/.git:$tmp/wt/.git:ro"'
+  check "通常のリポジトリには足さない" '! args "$tmp/proj" | grep -q -- "-v $common:"'
+  # コンテナの中から .git ファイルを書き換えて、無関係なリポジトリを指させた場合
+  git init -q "$tmp/secret"
+  mkdir -p "$tmp/hijack"
+  echo "gitdir: $tmp/secret/.git" > "$tmp/hijack/.git"
+  check "別リポジトリの .git を指させても足さない" '! args "$tmp/hijack" 2>/dev/null | grep -q -- "$tmp/secret"'
+  # 中に偽の gitdir を作り、指し返しを偽装したうえで commondir で別リポジトリへ飛ばす場合
+  mkdir -p "$tmp/hijack2/fake"
+  cp "$tmp/secret/.git/HEAD" "$tmp/hijack2/fake/"
+  echo "$tmp/secret/.git" > "$tmp/hijack2/fake/commondir"
+  echo "$tmp/hijack2/.git" > "$tmp/hijack2/fake/gitdir"
+  echo "gitdir: $tmp/hijack2/fake" > "$tmp/hijack2/.git"
+  check "偽の gitdir + commondir でも足さない" '! args "$tmp/hijack2" 2>/dev/null | grep -q -- "$tmp/secret"'
+  git init -q "$tmp/sub"
+  git -C "$tmp/sub" -c user.email=a@b -c user.name=a commit -q --allow-empty -m init
+  git init -q "$tmp/super"
+  git -C "$tmp/super" -c protocol.file.allow=always submodule add -q "$tmp/sub" m 2>/dev/null
+  check "submodule の gitdir が ro で渡る" 'args "$tmp/super/m" | grep -q -- "-v $tmp/super/.git/modules/m:$tmp/super/.git/modules/m:ro"'
+else
+  echo "  skip: git がないので省略"
+fi
+
+echo ".git/commondir を置かれても、ホストの git に config / hooks を差し替えさせない"
+# 実際のガードは .git 全体の ro マウント。ここではそれが要る理由（commondir が効くこと）を固定しておく
+if command -v git >/dev/null; then
+  git init -q "$tmp/cd"
+  mkdir -p "$tmp/cd/evil/objects" "$tmp/cd/evil/refs"
+  cp "$tmp/cd/.git/HEAD" "$tmp/cd/evil/"
+  printf '[core]\n\trepositoryformatversion = 0\n[user]\n\tname = evil\n' > "$tmp/cd/evil/config"
+  echo ../evil > "$tmp/cd/.git/commondir"
+  check "commondir の先の config が読まれる（= .git ごと守る必要がある）" '[ "$(git -C "$tmp/cd" config user.name)" = evil ]'
+  check "その .git も丸ごと ro で渡る" 'args "$tmp/cd" | grep -q -- "-v $tmp/cd/.git:$tmp/cd/.git:ro"'
 else
   echo "  skip: git がないので省略"
 fi
