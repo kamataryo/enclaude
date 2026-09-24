@@ -44,6 +44,16 @@ git_common_dir() {
   [ "$back" = "$1" ] && echo "$common"
 }
 
+# origin が GitHub なら owner/repo を返す。.git は ro で渡すので、コンテナの中から origin を
+# 書き換えて別のリポジトリのトークンを引き出すことはできない
+gh_repo() {
+  git -C "$1" remote get-url origin 2>/dev/null \
+    | sed -n 's#^.*github\.com[:/]\([A-Za-z0-9-]*/[A-Za-z0-9_.-]*\)$#\1#p' | sed 's/\.git$//'
+}
+
+# リポジトリごとの GitHub トークン（enclaudé gh-token で作る）。ホスト側に置き、マウントはしない
+token_file() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/enclaude/gh-tokens/$1"; }
+
 run() {
   # シンボリックリンクを解いておく。Docker はリンクをたどってマウントするので、論理パスのまま
   # 比べると ~/work/h -> ~ のようなリンク経由で $HOME の判定を素通りする
@@ -93,6 +103,13 @@ run() {
       echo "enclaudé: .git の向き先がこのディレクトリのものと確認できないので、本体の gitdir はマウントしません" >&2
     fi
   fi
+  # このリポジトリ用のトークンがあるときだけ渡す。値は引数に出さず環境変数で渡す（ps から見えない）
+  r="$(gh_repo "$ws")"
+  if [ -n "$r" ] && [ -f "$(token_file "$r")" ]; then
+    GH_TOKEN="$(cat "$(token_file "$r")")"
+    export GH_TOKEN
+    set -- -e GH_TOKEN "$@"
+  fi
   # claude の終了コードを持ち帰りたいので set -e に殺されないようにする
   st=0
   WORKSPACE="$ws" TZ="$(host_tz)" compose run --rm "$@" || st=$?
@@ -104,6 +121,34 @@ cmd_edit() {
   [ -e "$repo/Dockerfile.override" ] || cp "$repo/Dockerfile.override.sample" "$repo/Dockerfile.override"
   ${EDITOR:-vi} "$repo/Dockerfile.override"
   echo "変更したら enclaudé rebuild を実行してください"
+}
+
+cmd_gh_token() {
+  r="$(gh_repo "$(pwd -P)")"
+  [ -n "$r" ] || { echo "origin が GitHub のリポジトリではありません" >&2; return 1; }
+  # 権限・owner・期限はテンプレート URL で埋められるが、リポジトリの選択だけは埋められない
+  name="$(printf 'enclaude-%s' "$(echo "$r" | tr / -)" | cut -c1-40)"
+  url="https://github.com/settings/personal-access-tokens/new?name=$name&description=Select+only+$r&target_name=${r%%/*}&expires_in=90&issues=write"
+  echo "$r 用のトークンを作ります。Repository access で「Only select repositories」→ $r だけを選んで作成してください"
+  echo "$url"
+  if [ "$(uname)" = Darwin ]; then open "$url"; elif command -v xdg-open >/dev/null; then xdg-open "$url" >/dev/null 2>&1 || :; fi
+  printf 'トークンを貼り付けてください（表示されません）: '
+  trap 'stty echo 2>/dev/null' EXIT
+  trap 'exit 130' INT TERM
+  stty -echo 2>/dev/null || :
+  read -r t
+  stty echo 2>/dev/null || :
+  echo
+  [ -n "$t" ] || { echo "中止しました" >&2; return 1; }
+  # 無効なトークンや、private リポジトリを選び忘れたトークンはここで弾く（public だと選び忘れは見抜けない）
+  if ! curl -fsS -o /dev/null -H "Authorization: Bearer $t" "https://api.github.com/repos/$r"; then
+    echo "このトークンでは $r にアクセスできません（保存しません）" >&2
+    return 1
+  fi
+  f="$(token_file "$r")"
+  mkdir -p "$(dirname "$f")"
+  (umask 077 && printf '%s\n' "$t" > "$f")
+  echo "保存しました: $f"
 }
 
 cmd_rebuild() {
@@ -169,6 +214,7 @@ enclaudé — claude-code を Docker のサンドボックスで動かすラッ�
   enclaudé rebuild          イメージを再ビルド（Dockerfile / Dockerfile.override を変えたら実行）
   enclaudé self-update      claude-code を最新に更新して再ビルド（pnpm-lock.yaml を更新）
   enclaudé destroy          コンテナ・イメージ・ボリュームを削除
+  enclaudé gh-token         このリポジトリの Issue を読み書きするトークンを登録
   enclaudé help             このヘルプ
   enclaudé completion       補完スクリプトを出力（eval "$(enclaudé completion)"）
 
@@ -179,12 +225,12 @@ EOF
 cmd_completion() {
   cat <<'EOF'
 if [ -n "${ZSH_VERSION:-}" ]; then
-  _enclaude() { _arguments '1: :(help completion edit rebuild self-update destroy)' '*::arg:_files'; }
+  _enclaude() { _arguments '1: :(help completion edit rebuild self-update destroy gh-token)' '*::arg:_files'; }
   compdef _enclaude enclaudé
 else
   _enclaude() {
     [ "$COMP_CWORD" -eq 1 ] || return 0
-    COMPREPLY=($(compgen -W "help completion edit rebuild self-update destroy" -- "${COMP_WORDS[1]}"))
+    COMPREPLY=($(compgen -W "help completion edit rebuild self-update destroy gh-token" -- "${COMP_WORDS[1]}"))
   }
   complete -F _enclaude enclaudé
 fi
@@ -198,5 +244,6 @@ case "${1:-}" in
   rebuild)      cmd_rebuild ;;
   self-update)  cmd_self_update ;;
   destroy)      cmd_destroy ;;
+  gh-token)     cmd_gh_token ;;
   *)            run "$@" ;;
 esac

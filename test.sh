@@ -16,6 +16,7 @@ check "destroy の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé
 check "rebuild の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé rebuild"'
 check "edit の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé edit"'
 check "self-update の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé self-update"'
+check "gh-token の行がある" '"$here/bin/enclaudé" help | grep -q "enclaudé gh-token"'
 
 echo "destroy は N なら何もしない"
 check "中止する" 'echo n | "$here/bin/enclaudé" destroy | grep -q 中止'
@@ -135,6 +136,36 @@ if command -v git >/dev/null; then
   check "husky v8 も渡る" 'args "$tmp/husky8" | grep -q -- "-v $tmp/husky8/.husky:$tmp/husky8/.husky:ro"'
   check "ワークスペースの外は足さない" '! args "$tmp/outside" | grep -q -- "$tmp/ext"'
   check "設定が無ければ足さない" '! args "$tmp/proj" | grep -q -- "husky"'
+else
+  echo "  skip: git がないので省略"
+fi
+
+echo "origin が GitHub なら owner/repo を取り出す"
+if command -v git >/dev/null; then
+  eval "$(sed -n '/^gh_repo()/,/^}/p' "$here/bin/enclaudé")"
+  git init -q "$tmp/ghr"
+  remote() { git -C "$tmp/ghr" remote remove origin 2>/dev/null || :; git -C "$tmp/ghr" remote add origin "$1"; gh_repo "$tmp/ghr"; }
+  check "ssh 形式" '[ "$(remote git@github.com:o-1/r.x.git)" = o-1/r.x ]'
+  check "https 形式" '[ "$(remote https://github.com/o/r)" = o/r ]'
+  check "ssh:// 形式" '[ "$(remote ssh://git@github.com/o/r.git)" = o/r ]'
+  check "GitHub 以外は空" '[ -z "$(remote https://gitlab.com/o/r.git)" ]'
+  check "origin が無ければ空" '[ -z "$(gh_repo "$tmp/proj")" ]'
+else
+  echo "  skip: git がないので省略"
+fi
+
+echo "このリポジトリ用のトークンがあるときだけ GH_TOKEN を渡す"
+if command -v git >/dev/null; then
+  unset XDG_CONFIG_HOME
+  printf '#!/bin/sh\necho "GH_TOKEN=${GH_TOKEN:-}" "$@"\n' > "$tmp/bin/docker"
+  git -C "$tmp/ghr" remote set-url origin git@github.com:o/r.git
+  mkdir -p "$tmp/.config/enclaude/gh-tokens/o"
+  echo secret > "$tmp/.config/enclaude/gh-tokens/o/other"
+  check "トークンが無ければ渡さない" '! args "$tmp/ghr" | grep -q -- "-e GH_TOKEN"'
+  echo secret > "$tmp/.config/enclaude/gh-tokens/o/r"
+  check "トークンがあれば -e GH_TOKEN を渡す" 'args "$tmp/ghr" | grep -q -- "-e GH_TOKEN"'
+  check "値は環境変数で渡り、引数には出ない" 'args "$tmp/ghr" | grep -q "^GH_TOKEN=secret " && [ "$(args "$tmp/ghr" | grep -o secret | wc -l)" -eq 1 ]'
+  check "別リポジトリでは渡さない" '! args "$tmp/proj" | grep -q -- "-e GH_TOKEN"'
 else
   echo "  skip: git がないので省略"
 fi

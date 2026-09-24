@@ -11,13 +11,14 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 - ホストの `~/.claude/CLAUDE.md` は読み取り専用で共有されます
 - git リポジトリでは `git log` / `git diff` などの読み取り系が使えます（`.git` を読み取り専用で重ねるので、`git add` / `git commit` は通りません。worktree / submodule でも同じです）
 - 足りないランタイムやツールは `Dockerfile.override` でイメージに重ねられます
+- GitHub の Issue の読み書き（任意。リポジトリごとに `enclaudé gh-token` でトークンを登録したときだけ。[後述](#github-の-issue-を読み書きする任意)）
 
 ### できないこと
 
 - マウントしたディレクトリの外にあるホストのファイルの読み書き
 - ホストの `~/.claude/settings.json` やスキル・エージェント類の引き継ぎ（必要な設定は `settings.override.json` に、プラグインは `Dockerfile.override` に書いてください）。なお claude.ai アカウントで有効にしたスキルとプラグインは、ログインしたコンテナにも同期されます。止めたいときは `settings.override.json` に `"syncClaudeAiSkills": false` / `"syncClaudeAiPlugins": false` を書いてください
 - ホストのブラウザや GUI を必要とする機能（Claude in Chrome など。必要なときは、これらはホスト側の Claude Code で実行するのが簡単だと思います）
-- Git や GitHub への書き込み操作（`add` / `commit` / `push` など。ホスト環境の Git の設定や、GitHub の認証情報も持ち込みません）
+- Git や GitHub への書き込み操作（`add` / `commit` / `push`、PR の作成など。ホスト環境の Git の設定や、GitHub の認証情報も持ち込みません。例外は上の Issue の読み書きだけです）
 - `/` や `$HOME`（とその親）での起動。ホストの資格情報がまるごと rw で入ってしまうので、起動時に拒否します
 - コンテナを起動するようなタスク（Docker in Docker はありません）
 - ネットワークの遮断（コンテナから外部へは自由に通信できます）
@@ -63,6 +64,7 @@ enclaudé # 初回起動時はコンテナが自動でビルドされます
 | `enclaudé rebuild` | イメージを再ビルドします。`Dockerfile` や `Dockerfile.override` を変えたとき、`git pull` で `pnpm-lock.yaml` が変わったときに実行してください |
 | `enclaudé self-update` | claude-code を最新のバージョンに更新して、イメージを再ビルドします |
 | `enclaudé destroy` | コンテナ・イメージ・ボリュームを削除します。ログイン状態も消えます |
+| `enclaudé gh-token` | カレントディレクトリのリポジトリの Issue を読み書きするトークンを登録します |
 
 - コンテナ自体がサンドボックスなので、`--dangerously-skip-permissions` を付けて起動します
 - 初回起動時に Claude へのログインが求められます
@@ -92,6 +94,7 @@ enclaudé # 初回起動時はコンテナが自動でビルドされます
 - git 管理外のディレクトリ。コンテナの中から `.git` を新しく作れるので、あとでホストの git をそこで使うと、仕込まれた config や hooks が走ります
 - `~/.claude.json` は読み取り専用にできないので、ユーザースコープの MCP サーバー登録は `home` ボリューム経由で以後のコンテナにも残ります
 - `home` ボリュームは全プロジェクト共有なので、汚染されると以後すべてのコンテナに効き続けます
+- `enclaudé gh-token` で登録したトークンは、コンテナの中から外部へ送信できます（ネットワークは遮断していません）。漏れた場合の被害は「そのリポジトリの Issue の読み書き」までです
 
 ## Claude の設定を上書きする（任意）
 
@@ -119,7 +122,7 @@ popd
 
 ## ランタイムやツールを追加する（任意）
 
-イメージに入っているのは Node.js、Git、Python 3（`python3` と `uv`。pip はシステムには無いので、`python3 -m venv` か `uv` で環境を切って使います）と、基本的な CLI（`curl` / `less` / `ps` / `rg` / `jq` / `zip` / `unzip` / `file`）だけです。PHP や Go など作業に必要なものは、`Dockerfile.override`（Git 管理外）でベースイメージの上に重ねられます。`settings.override.json` と同じく全プロジェクト共通です。
+イメージに入っているのは Node.js、Git、Python 3（`python3` と `uv`。pip はシステムには無いので、`python3 -m venv` か `uv` で環境を切って使います）と、基本的な CLI（`curl` / `less` / `ps` / `rg` / `jq` / `zip` / `unzip` / `file` / `gh`）だけです。PHP や Go など作業に必要なものは、`Dockerfile.override`（Git 管理外）でベースイメージの上に重ねられます。`settings.override.json` と同じく全プロジェクト共通です。
 
 ```shell
 enclaudé edit     # $EDITOR で開きます。初回は Dockerfile.override.sample からコピーされます
@@ -153,3 +156,19 @@ ENV CLAUDE_CODE_PLUGIN_SEED_DIR=/opt/claude-seed
 ```
 
 シードは読み取り専用です。外したいときは `/plugin disable` を使うか、`Dockerfile.override` を書き換えて `enclaudé rebuild` してください。
+
+## GitHub の Issue を読み書きする（任意）
+
+コンテナの中の claude に Issue を読ませたり、コメントさせたりできます。リポジトリごとに 1 回、トークンを登録してください。
+
+```shell
+cd <作業ディレクトリ>  # origin が GitHub のリポジトリ
+enclaudé gh-token      # ブラウザでトークンの作成画面が開きます
+enclaudé               # 以後、このリポジトリで起動したときだけ gh が使えます
+```
+
+作成画面では、名前・権限（Issues の Read and write）・有効期限（90 日）が入力済みになっています。**Repository access で「Only select repositories」を選び、対象のリポジトリだけを選んでください**（ここだけは URL で指定できません）。作成したトークンを貼り付けると、そのリポジトリにアクセスできるか確かめてから保存します。期限が切れたら、もう一度 `enclaudé gh-token` を実行してください。
+
+- トークンはホストの `~/.config/enclaude/gh-tokens/<owner>/<repo>` に保存され、起動時に `origin` がそのリポジトリのときだけ `GH_TOKEN` としてコンテナへ渡ります。やめたいときはこのファイルを消してください
+- `All repositories` は選ばないでください。無関係な private リポジトリの Issue まで漏洩の範囲に入ります
+- Contents（コード）や Pull requests の権限は足さないでください。書き込み権限は、ホストで `git commit` / `push` するときに人間が見るという前提をバイパスします。とくに Contents: Write は、workflow が呼ぶスクリプトを差し替えるだけで Actions 上の任意コード実行につながります
