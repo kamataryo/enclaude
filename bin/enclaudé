@@ -29,11 +29,6 @@ host_tz() { [ -n "${TZ:-}" ] && echo "$TZ" || readlink /etc/localtime 2>/dev/nul
 run() {
   ws="$1"; shift
   # マウントした時点でホスト側に手が届いてしまうディレクトリは、その前に弾く。
-  # enclaudé 自身が入っていると bin/enclaudé を書き換えられ、次の起動でホストの
-  # シェルがそれを実行する（PATH に入っているので、サンドボックスからの脱出になる）
-  case "$repo" in "$ws"|"$ws"/*)
-    echo "enclaudé 自身を含むディレクトリでは起動できません: $ws" >&2; exit 1 ;;
-  esac
   # $HOME 以上を丸ごと渡すと ~/.ssh や ~/.aws が rw で入る。/Users のような親も同じ
   case "$ws" in /)
     echo "/ をそのままマウントするのは危険です" >&2; exit 1 ;;

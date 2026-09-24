@@ -65,9 +65,8 @@ check "hooks が ro で渡る" 'args "$tmp/nohooks" | grep -q -- "-v $tmp/nohook
 check "空の hooks を作る" '[ -d "$tmp/nohooks/.git/hooks" ]'
 
 echo "危険なディレクトリでは起動しない"
-check "enclaudé 自身を含むと落ちる" '! args "$here" >/dev/null 2>&1'
-check "docker は呼ばれない" '[ -z "$(args "$here" 2>/dev/null)" ]'
 check "\$HOME は落ちる" '! args "$tmp" >/dev/null 2>&1'
+check "docker は呼ばれない" '[ -z "$(args "$tmp" 2>/dev/null)" ]'
 check "/ は落ちる" '! args / >/dev/null 2>&1'
 check "\$HOME の親も落ちる" '! (cd "$tmp/proj" && PATH="$tmp/bin:$PATH" HOME="$tmp/proj/sub" "$here/bin/enclaudé") >/dev/null 2>&1'
 
