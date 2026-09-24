@@ -61,6 +61,7 @@ enclaudé # 初回起動時はコンテナが自動でビルドされます
 | `enclaudé help` | enclaudé 自身のヘルプです。`--help` / `-h` は claude のヘルプ（そのまま渡ります） |
 | `enclaudé completion` | 補完スクリプトを出力します |
 | `enclaudé resume [id]` | `enclaudé --resume [id]` と同じです |
+| `enclaudé continue` | `enclaudé --continue` と同じです。このディレクトリで直前の会話を再開します |
 | `enclaudé edit` | `Dockerfile.override` を `$EDITOR` で開きます。無ければ `Dockerfile.override.sample` からコピーします |
 | `enclaudé rebuild` | イメージを再ビルドします。`Dockerfile` や `Dockerfile.override` を変えたとき、`git pull` で `pnpm-lock.yaml` が変わったときに実行してください |
 | `enclaudé self-update` | claude-code を最新のバージョンに更新して、イメージを再ビルドします |
