@@ -15,7 +15,7 @@ Claude Code を Docker のサンドボックスで動かすラッパーです。
 ### できないこと
 
 - マウントしたディレクトリの外にあるホストのファイルの読み書き
-- ホストの `~/.claude/settings.json` やスキル・エージェント類の引き継ぎ（必要な設定は `settings.override.json` に、プラグインは `Dockerfile.override` に書いてください）
+- ホストの `~/.claude/settings.json` やスキル・エージェント類の引き継ぎ（必要な設定は `settings.override.json` に、プラグインは `Dockerfile.override` に書いてください）。なお claude.ai アカウントで有効にしたスキルとプラグインは、ログインしたコンテナにも同期されます。止めたいときは `settings.override.json` に `"syncClaudeAiSkills": false` / `"syncClaudeAiPlugins": false` を書いてください
 - ホストのブラウザや GUI を必要とする機能（Claude in Chrome など。必要なときは、これらはホスト側の Claude Code で実行するのが簡単だと思います）
 - Git や GitHub への書き込み操作（ホスト環境の Git の設定や、GitHub の認証情報は持ち込みません）
 - コンテナを起動するようなタスク（Docker in Docker はありません）
@@ -84,7 +84,7 @@ popd
 
 ホスト固有のパス（`hooks` や `env` など）はコンテナ内では壊れた参照になるので、まるごとコピーせず必要な項目だけ残してください。
 
-環境変数は `env` に書けばそのまま届きます。使える変数は [Environment variables](https://code.claude.com/docs/en/env-vars) にあります。ただし `CLAUDE_CONFIG_DIR` のようにファイルの置き場所を変える変数は、`home` ボリュームでの永続化と食い違うので変えないでください。
+環境変数は `env` に書けばそのまま届きます。使える変数は [Environment variables](https://code.claude.com/docs/en/env-vars) にあります。ただし `CLAUDE_CONFIG_DIR` のようにファイルの置き場所を変える変数は、`home` ボリュームでの永続化と食い違うので変えないでください。また、`compose.yml` の `environment` で渡している `TZ` と `DISABLE_UPDATES` は起動時の環境変数が優先されるため、`env` に書いても効きません。
 
 ```json
 {
